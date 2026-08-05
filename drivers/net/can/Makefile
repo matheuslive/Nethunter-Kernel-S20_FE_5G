@@ -38,3 +38,9 @@ obj-y				+= can-isotp/
 obj-$(CONFIG_CAN_CAN327)	+= can327.o
 
 subdir-ccflags-$(CONFIG_CAN_DEBUG_DEVICES) += -DDEBUG
+
+# Os submodules CAN (can-isotp, usb-can-2-module) vem do upstream mais novo e
+# deixam helpers sem uso neste kernel 4.19. O scripts/gcc-wrapper.py da QCOM
+# trata qualquer warning nao-whitelistado como erro fatal, entao o build
+# quebrava em isotp.c ("error, forbidden warning").
+subdir-ccflags-y += -Wno-unused-function
