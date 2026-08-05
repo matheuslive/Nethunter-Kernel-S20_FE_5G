@@ -1,0 +1,5 @@
+# Gerados pelo build.sh (o kbuild roda out-of-tree, nada suja a arvore)
+/out/
+/build/
+
+__pycache__/
