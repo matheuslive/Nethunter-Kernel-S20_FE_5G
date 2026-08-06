@@ -1,0 +1,6 @@
+id=nethunter_companion_r8q
+name=NetHunter Companion (r8q)
+version=@VERSION@
+versionCode=@VERSIONCODE@
+author=Svirusx / build local
+description=Companion do kernel Nethunter r8q: modulos .ko, hid-keyboard e init HID (system-less). Exige o kernel Nethunter correspondente flashado.

@@ -26,7 +26,12 @@ JOBS=$(nproc)
 OUT=$DIR/out
 DIST=$DIR/build/$VARIANT
 AK3=$OUT/AnyKernel3
+MAG=$OUT/magisk
 DTS_DIR=$OUT/arch/$ARCH/boot/dts
+
+# Versao do modulo Magisk companion (versionCode tem que ser inteiro).
+MOD_VERSION=v4.1
+MOD_VERSIONCODE=41
 
 # Toolchain versionado no proprio repo. O GCC 4.9 entra so como binutils
 # (as, ld, ar...) via CROSS_COMPILE; quem compila e o clang do REAL_CC.
@@ -78,30 +83,51 @@ cat "$DTS_DIR"/vendor/qcom/*.dtb > "$DIST/dtb.img"
 mapfile -t DTBO_FILES < <(find "$DTS_DIR/samsung/" -name "${CHIPSET_NAME}-sec-${VARIANT}-*-r*.dtbo")
 "$DIR/tools/mkdtimg" create "$DIST/dtbo.img" --page_size=4096 "${DTBO_FILES[@]}"
 
-# Coleta os modulos ANTES de criar o $AK3 -- ele mora dentro do $OUT, entao um
-# find posterior acharia tambem as copias que acabamos de colocar la.
-mapfile -t MODULES < <(find "$OUT" -path "$AK3" -prune -o -name '*.ko' -print)
+# Coleta os modulos ANTES de mexer em $OUT/AnyKernel3|magisk (ambos moram
+# dentro do $OUT; um find posterior acharia as copias que acabamos de por la).
+mapfile -t MODULES < <(find "$OUT" \( -path "$AK3" -o -path "$MAG" \) -prune -o -name '*.ko' -print)
+rm -f "$DIST/modules"/*.ko
+[ ${#MODULES[@]} -gt 0 ] && cp -f "${MODULES[@]}" "$DIST/modules/"
 
-# Copia de trabalho do AnyKernel3, recriada do zero para nao acumular
-# modulo obsoleto de build anterior dentro do zip.
+# --- 1. Zip flashavel KERNEL-ONLY (nao toca particao; ver packaging/) --------
+# So o zImage + o anykernel enxuto. Sem system/, vendor/, ramdisk-patch/,
+# patch.d/, modules/, ak_patches/ -- essas eram as "NetHunter additions" que
+# escreviam em particao read-only. O que ia nelas vai no modulo Magisk abaixo.
 rm -rf "$AK3"
 cp -a "$DIR/AnyKernel3" "$AK3"
+rm -rf "$AK3"/system "$AK3"/vendor "$AK3"/ramdisk-patch "$AK3"/patch.d \
+       "$AK3"/modules "$AK3"/ak_patches "$AK3"/.git
+cp -f "$DIR/packaging/anykernel-kernelonly.sh" "$AK3/anykernel.sh"
 cp -f "$OUT/arch/$ARCH/boot/Image.gz-dtb" "$AK3/zImage"
 
-# Os .ko vao para system/lib/modules -- e o bloco NetHunter do anykernel.sh
-# que os instala (install "/system/lib"), nao o do.modules do AnyKernel.
-mkdir -p "$AK3/system/lib/modules"
-rm -f "$DIST/modules"/*.ko
-if [ ${#MODULES[@]} -gt 0 ]; then
-	cp -f "${MODULES[@]}" "$AK3/system/lib/modules/"
-	cp -f "${MODULES[@]}" "$DIST/modules/"
-fi
-
-# Zip flashavel
 rm -f "$DIST/$VERSION.zip"
-(cd "$AK3" && zip -qr9 "$DIST/$VERSION.zip" ./* -x .git README.md '*placeholder')
+(cd "$AK3" && zip -qr9 "$DIST/$VERSION.zip" ./* -x README.md '*placeholder')
+
+# --- 2. Modulo Magisk companion (.ko + hid-keyboard + init HID) --------------
+rm -rf "$MAG"
+cp -a "$DIR/packaging/magisk" "$MAG"
+rm -f "$MAG/overlay.d/sbin/.gitkeep"
+sed -i -e "s/@VERSION@/$MOD_VERSION/" -e "s/@VERSIONCODE@/$MOD_VERSIONCODE/" "$MAG/module.prop"
+
+# .ko via magic mount
+mkdir -p "$MAG/system/lib/modules"
+[ ${#MODULES[@]} -gt 0 ] && cp -f "${MODULES[@]}" "$MAG/system/lib/modules/"
+
+# hid-keyboard e descriptors HID (fontes do template AnyKernel3)
+mkdir -p "$MAG/system/xbin" "$MAG/system/etc/nethunter"
+cp -f "$DIR/AnyKernel3/system/xbin/hid-keyboard" "$MAG/system/xbin/"
+cp -f "$DIR/AnyKernel3/ramdisk-patch"/*-descriptor.bin "$MAG/system/etc/nethunter/"
+
+# init.nethunter.rc: importado no boot via overlay.d. Reaponta os descriptors
+# de / (onde o ramdisk-patch os punha) para /system/etc/nethunter (magic mount).
+sed -e 's#copy /\([a-z]*-descriptor.bin\)#copy /system/etc/nethunter/\1#' \
+    "$DIR/AnyKernel3/ramdisk-patch/init.nethunter.rc" > "$MAG/overlay.d/sbin/init.nethunter.rc"
+
+rm -f "$DIST/nethunter-companion-$VARIANT.zip"
+(cd "$MAG" && zip -qr9 "$DIST/nethunter-companion-$VARIANT.zip" ./*)
 
 echo
 echo ">> $(cat "$OUT/include/config/kernel.release")"
-echo ">> $DIST/$VERSION.zip ($(du -h "$DIST/$VERSION.zip" | cut -f1))"
-ls -1 "$DIST/modules"
+echo ">> kernel   : $DIST/$VERSION.zip ($(du -h "$DIST/$VERSION.zip" | cut -f1))"
+echo ">> companion: $DIST/nethunter-companion-$VARIANT.zip ($(du -h "$DIST/nethunter-companion-$VARIANT.zip" | cut -f1))"
+echo ">> modulos  : $(ls "$DIST/modules" | tr '\n' ' ')"
