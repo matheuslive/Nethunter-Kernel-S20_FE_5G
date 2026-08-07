@@ -20,18 +20,19 @@ DEFCONFIG_NAME=wirus_defconfig
 CHIPSET_NAME=kona
 VARIANT=r8q
 ARCH=arm64
-VERSION=Nethunter_WirusMOD_${VARIANT}_v4.1
+VERSION=NetHunter_matheuslive_${VARIANT}_v4.2
 JOBS=$(nproc)
 
 OUT=$DIR/out
 DIST=$DIR/build/$VARIANT
 AK3=$OUT/AnyKernel3
 MAG=$OUT/magisk
+STAGE=$OUT/moddep
 DTS_DIR=$OUT/arch/$ARCH/boot/dts
 
 # Versao do modulo Magisk companion (versionCode tem que ser inteiro).
-MOD_VERSION=v4.1
-MOD_VERSIONCODE=41
+MOD_VERSION=v4.2
+MOD_VERSIONCODE=42
 
 # Toolchain versionado no proprio repo. O GCC 4.9 entra so como binutils
 # (as, ld, ar...) via CROSS_COMPILE; quem compila e o clang do REAL_CC.
@@ -43,18 +44,26 @@ KERNEL_LLVM_BIN=$DIR/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
 CLANG_TRIPLE=aarch64-linux-gnu-
 STRIP=${BUILD_CROSS_COMPILE}strip
 
-# NAO colocar ccache no REAL_CC enquanto CONFIG_DEBUG_INFO=y: com "-g" o
-# ccache separa preprocessamento e compilacao, e os labels locais de DWARF
-# ficam orfaos -- o link morre em
+# ccache quando disponivel: o gcc-wrapper.py da QCOM so faz Popen(argv[1:]),
+# entao "ccache clang" no REAL_CC passa reto e cacheia normalmente.
+#
+# ATENCAO: isto so vale com CONFIG_DEBUG_INFO desligado. Com "-g" o ccache
+# separa preprocessamento de compilacao e os labels locais de DWARF ficam
+# orfaos, e o link morre em
 #   rtl8812au/core/rtw_recv.o:(.debug_info+0x...): undefined reference to `.Linfo_string6102'
-# Se um dia CONFIG_DEBUG_INFO for desligado, ccache passa a valer a pena.
+if command -v ccache >/dev/null 2>&1 &&
+   ! grep -q '^CONFIG_DEBUG_INFO=y' "$DIR/arch/$ARCH/configs/$DEFCONFIG_NAME"; then
+	REAL_CC="ccache $KERNEL_LLVM_BIN"
+else
+	REAL_CC="$KERNEL_LLVM_BIN"
+fi
 
 MAKE_ARGS=(
 	-C "$DIR"
 	O="$OUT"
 	ARCH="$ARCH"
 	CROSS_COMPILE="$BUILD_CROSS_COMPILE"
-	REAL_CC="$KERNEL_LLVM_BIN"
+	REAL_CC="$REAL_CC"
 	CFP_CC="$KERNEL_LLVM_BIN"
 	CLANG_TRIPLE="$CLANG_TRIPLE"
 	DTC_EXT="$DIR/tools/dtc"
@@ -90,9 +99,10 @@ cat "$DTS_DIR"/vendor/qcom/*.dtb > "$DIST/dtb.img"
 mapfile -t DTBO_FILES < <(find "$DTS_DIR/samsung/" -name "${CHIPSET_NAME}-sec-${VARIANT}-*-r*.dtbo")
 "$DIR/tools/mkdtimg" create "$DIST/dtbo.img" --page_size=4096 "${DTBO_FILES[@]}"
 
-# Coleta os modulos ANTES de mexer em $OUT/AnyKernel3|magisk (ambos moram
-# dentro do $OUT; um find posterior acharia as copias que acabamos de por la).
-mapfile -t MODULES < <(find "$OUT" \( -path "$AK3" -o -path "$MAG" \) -prune -o -name '*.ko' -print)
+# Coleta os modulos ANTES de mexer em $OUT/AnyKernel3|magisk|moddep (os tres
+# moram dentro do $OUT; um find posterior acharia as copias que acabamos de por
+# la -- e num build incremental elas sobrevivem da rodada anterior).
+mapfile -t MODULES < <(find "$OUT" \( -path "$AK3" -o -path "$MAG" -o -path "$STAGE" \) -prune -o -name '*.ko' -print)
 rm -f "$DIST/modules"/*.ko
 if [ ${#MODULES[@]} -gt 0 ]; then
 	cp -f "${MODULES[@]}" "$DIST/modules/"
@@ -122,9 +132,35 @@ cp -a "$DIR/packaging/magisk" "$MAG"
 rm -f "$MAG/overlay.d/sbin/.gitkeep"
 sed -i -e "s/@VERSION@/$MOD_VERSION/" -e "s/@VERSIONCODE@/$MOD_VERSIONCODE/" "$MAG/module.prop"
 
-# .ko via magic mount
+# .ko via magic mount + indices do depmod.
+#
+# Os drivers de dongle WiFi sao =m (built-in eles custavam ~7 MB de kernel
+# residente mesmo sem dongle nenhum plugado). Quem carrega e o helper
+# system/xbin/usbwifi, que chama "modprobe -d /system/lib/modules": o modprobe
+# do toolbox do Android le modules.dep/modules.alias do diretorio passado no -d.
+#
+# O depmod exige a arvore <base>/lib/modules/<release>/, entao montamos uma
+# staging e levamos so os indices para o diretorio flat do companion.
 mkdir -p "$MAG/system/lib/modules"
-[ ${#MODULES[@]} -gt 0 ] && cp -f "${MODULES[@]}" "$MAG/system/lib/modules/"
+if [ ${#MODULES[@]} -gt 0 ]; then
+	cp -f "${MODULES[@]}" "$MAG/system/lib/modules/"
+
+	KREL=$(cat "$OUT/include/config/kernel.release")
+	rm -rf "$STAGE"
+	mkdir -p "$STAGE/lib/modules/$KREL"
+	cp -f "${MODULES[@]}" "$STAGE/lib/modules/$KREL/"
+	# Vazios de proposito: aqui os .ko estao flat, entao o modules.order do
+	# kbuild (paths kernel/drivers/...) nao casaria. O depmod so usa esses dois
+	# para desempatar alias duplicado; sem eles ele avisa a cada build.
+	: > "$STAGE/lib/modules/$KREL/modules.order"
+	: > "$STAGE/lib/modules/$KREL/modules.builtin"
+	: > "$STAGE/lib/modules/$KREL/modules.builtin.modinfo"
+	/sbin/depmod -b "$STAGE" "$KREL"
+	cp -f "$STAGE/lib/modules/$KREL"/modules.dep \
+	      "$STAGE/lib/modules/$KREL"/modules.alias \
+	      "$STAGE/lib/modules/$KREL"/modules.symbols \
+	      "$MAG/system/lib/modules/"
+fi
 
 # hid-keyboard e descriptors HID (fontes do template AnyKernel3)
 mkdir -p "$MAG/system/xbin" "$MAG/system/etc/nethunter"

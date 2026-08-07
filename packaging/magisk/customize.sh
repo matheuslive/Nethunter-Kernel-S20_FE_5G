@@ -21,7 +21,7 @@ esac
 # (CONFIG_MODVERSIONS + vermagic). Aviso, mas nao aborta: o modulo pode ser
 # instalado antes do primeiro boot no kernel novo.
 case "$KREL" in
-  *Nethunter_WirusMOD_r8q*) ui_print "- Kernel Nethunter detectado, ok." ;;
+  *NetHunter_matheuslive_r8q*) ui_print "- Kernel Nethunter detectado, ok." ;;
   *)
     ui_print "! ATENCAO: o kernel rodando nao parece ser o Nethunter r8q."
     ui_print "! Os modulos .ko so vao carregar depois de flashar o kernel"
@@ -31,7 +31,12 @@ esac
 
 ui_print "- Ajustando permissoes"
 set_perm_recursive "$MODPATH" 0 0 0755 0644
-[ -f "$MODPATH/system/xbin/hid-keyboard" ] && \
-  set_perm "$MODPATH/system/xbin/hid-keyboard" 0 0 0755
+for bin in hid-keyboard usbwifi; do
+  [ -f "$MODPATH/system/xbin/$bin" ] && set_perm "$MODPATH/system/xbin/$bin" 0 0 0755
+done
+
+ui_print "- Drivers de dongle WiFi vem como .ko (nao mais built-in):"
+ui_print "    usbwifi        carrega o driver do dongle plugado"
+ui_print "    usbwifi -l     lista os drivers disponiveis"
 
 ui_print "- Instalado. Reinicie para aplicar."

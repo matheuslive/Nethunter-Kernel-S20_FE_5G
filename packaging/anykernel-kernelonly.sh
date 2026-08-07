@@ -13,7 +13,7 @@
 ## AnyKernel setup
 # begin properties
 properties() { '
-kernel.string=r8q Nethunter kernel (kernel-only) by Svirusx @ xda-developers
+kernel.string=r8q NetHunter kernel v4.2 (kernel-only) by matheuslive -- base Svirusx @ xda-developers
 do.devicecheck=1
 do.modules=0
 do.systemless=1

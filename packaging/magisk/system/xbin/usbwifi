@@ -1,0 +1,78 @@
+#!/system/bin/sh
+# usbwifi -- carrega o driver do dongle WiFi USB plugado.
+#
+# Os drivers de dongle (ath9k_htc, 88XXAU, rt2800usb, mt7601u, ...) deixaram de
+# ser built-in no kernel: como .ko eles so ocupam RAM quando ha dongle plugado
+# (~7 MB a menos de kernel residente). Em troca, precisam ser carregados.
+#
+# Uso:
+#   usbwifi              detecta o dongle plugado e carrega o driver dele
+#   usbwifi <modulo>     carrega um modulo pelo nome (ex.: usbwifi 88XXAU)
+#   usbwifi -l           lista os modulos disponiveis
+#   usbwifi -r <modulo>  descarrega
+
+MODDIR=/system/lib/modules
+
+die() { echo "usbwifi: $*" >&2; exit 1; }
+
+[ -d "$MODDIR" ] || die "$MODDIR nao existe (o modulo Magisk esta instalado?)"
+[ -f "$MODDIR/modules.alias" ] || die "$MODDIR/modules.alias faltando"
+
+case "${1:-}" in
+  -l|--list)
+    ls "$MODDIR" | grep '\.ko$' | sed 's/\.ko$//' | sort
+    exit 0
+    ;;
+  -r|--remove)
+    [ -n "${2:-}" ] || die "-r exige o nome do modulo"
+    modprobe -d "$MODDIR" -r "$2" || die "nao consegui descarregar $2"
+    echo "usbwifi: $2 descarregado"
+    exit 0
+    ;;
+  -h|--help)
+    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
+    exit 0
+    ;;
+esac
+
+load() {
+	modprobe -d "$MODDIR" "$1" || die "modprobe de $1 falhou (veja dmesg)"
+	echo "usbwifi: $1 carregado"
+	echo "usbwifi: interfaces agora: $(ls /sys/class/net | tr '\n' ' ')"
+	echo "usbwifi: se o driver reclamar de firmware faltando no dmesg, o .bin"
+	echo "         precisa estar em /vendor/firmware ou /lib/firmware."
+}
+
+# Modulo dado na linha de comando.
+if [ -n "${1:-}" ]; then
+	load "$1"
+	exit 0
+fi
+
+# Sem argumento: procura um dongle plugado e casa o VID:PID contra o
+# modules.alias. Os aliases USB sempre comecam por "usb:vXXXXpXXXX", entao
+# basta comparar esse prefixo (em maiusculas, como o depmod gera).
+for dev in /sys/bus/usb/devices/*; do
+	[ -f "$dev/idVendor" ] || continue
+	vid=$(cat "$dev/idVendor" 2>/dev/null | tr 'a-f' 'A-F')
+	pid=$(cat "$dev/idProduct" 2>/dev/null | tr 'a-f' 'A-F')
+	[ -n "$vid" ] && [ -n "$pid" ] || continue
+
+	mod=$(awk -v k="usb:v${vid}p${pid}" \
+	          '$1=="alias" && index($2,k)==1 {print $3; exit}' \
+	          "$MODDIR/modules.alias")
+	[ -n "$mod" ] || continue
+
+	echo "usbwifi: $vid:$pid ($(cat "$dev/product" 2>/dev/null)) -> $mod"
+	load "$mod"
+	exit 0
+done
+
+echo "usbwifi: nenhum dongle conhecido plugado." >&2
+echo "         dongles vistos pelo USB:" >&2
+for dev in /sys/bus/usb/devices/*; do
+	[ -f "$dev/idVendor" ] || continue
+	echo "           $(cat "$dev/idVendor"):$(cat "$dev/idProduct") $(cat "$dev/product" 2>/dev/null)" >&2
+done
+echo "         'usbwifi -l' lista os drivers disponiveis para carregar na mao." >&2
+exit 1
