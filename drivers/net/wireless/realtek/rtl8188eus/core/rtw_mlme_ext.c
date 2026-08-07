@@ -13601,7 +13601,7 @@ void rtw_ft_roam_status_reset(_adapter *padapter)
 }
 #endif
 
-u8 NULL_hdlx(_adapter *padapter, u8 *pbuf)
+u8 NULL_hdl(_adapter *padapter, u8 *pbuf)
 {
 	return H2C_SUCCESS;
 }

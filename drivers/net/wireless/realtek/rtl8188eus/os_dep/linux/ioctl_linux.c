@@ -5752,7 +5752,7 @@ static int rtw_cta_test_start(struct net_device *dev,
 	return ret;
 }
 
-extern int rtw_change_ifname(_adapter *padapter, const char *ifnamex);
+extern int rtw_change_ifnamex(_adapter *padapter, const char *ifnamex);
 static int rtw_rereg_nd_name(struct net_device *dev,
 			     struct iw_request_info *info,
 			     union iwreq_data *wrqu, char *extra)
@@ -5788,7 +5788,7 @@ static int rtw_rereg_nd_name(struct net_device *dev,
 
 	RTW_INFO("%s new_ifnamex:%s\n", __FUNCTION__, new_ifnamex);
 	rtw_set_rtnl_lock_holderx(dvobj, current);
-	ret = rtw_change_ifname(padapter, new_ifnamex);
+	ret = rtw_change_ifnamex(padapter, new_ifnamex);
 	rtw_set_rtnl_lock_holderx(dvobj, NULL);
 	if (0 != ret)
 		goto exit;
