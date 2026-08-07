@@ -162,6 +162,42 @@ if [ ${#MODULES[@]} -gt 0 ]; then
 	      "$MAG/system/lib/modules/"
 fi
 
+# Firmware dos dongles -> /vendor/firmware (magic mount).
+#
+# O kernel so procura em /lib/firmware*, que nem existe no Android; quem salva
+# e o fallback do user helper (CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y): o
+# kernel emite uevent e o ueventd procura nos firmware_directories dele
+# (/etc/firmware/ /odm/firmware/ /vendor/firmware/ /firmware/image/). Nenhum
+# dos drivers de dongle usa request_firmware_direct(), que puraria esse
+# caminho, entao /vendor/firmware serve. NAO mexer em firmware_class.path: ele
+# aponta para /vendor/firmware_mnt/image e outros subsistemas dependem disso.
+mkdir -p "$MAG/system/vendor/firmware"
+cp -a "$DIR/packaging/firmware/." "$MAG/system/vendor/firmware/"
+rm -f "$MAG/system/vendor/firmware/README.md"   # doc do repo, nao vai pro device
+
+# Avisa se algum modulo declara firmware que nao esta empacotado -- sem isto,
+# habilitar um driver novo faria o firmware sumir em silencio. Os ausentes ja
+# analisados ficam nesta lista para o aviso so falar de novidade; o porque de
+# cada um esta em packaging/firmware/README.md.
+FW_KNOWN_MISSING=(
+	fw.ram.bin                           # nome da API 1 do ath6kl; o driver usa fw-N.bin
+	ath6k/AR6004/hw1.3/fw.ram.bin        # idem
+	ath6k/AR6004/hw1.0/bdata.bin         # revisao inexistente no linux-firmware
+	ath6k/AR6004/hw1.0/bdata.DB132.bin   # idem
+	ath6k/AR6004/hw1.1/bdata.bin         # idem
+	ath6k/AR6004/hw1.1/bdata.DB132.bin   # idem
+	rtlwifi/rtl8723bu_bt.bin             # lado BT do 8723BU; o WiFi sobe sem
+)
+if command -v /sbin/modinfo >/dev/null 2>&1; then
+	for ko in "${MODULES[@]}"; do
+		/sbin/modinfo -F firmware "$ko" 2>/dev/null
+	done | sort -u | while read -r fw; do
+		[ -f "$MAG/system/vendor/firmware/$fw" ] && continue
+		case " ${FW_KNOWN_MISSING[*]} " in *" $fw "*) continue ;; esac
+		echo "!! firmware declarado e ausente: $fw" >&2
+	done
+fi
+
 # hid-keyboard e descriptors HID (fontes do template AnyKernel3)
 mkdir -p "$MAG/system/xbin" "$MAG/system/etc/nethunter"
 cp -f "$DIR/AnyKernel3/system/xbin/hid-keyboard" "$MAG/system/xbin/"

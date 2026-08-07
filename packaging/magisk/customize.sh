@@ -35,7 +35,9 @@ for bin in hid-keyboard usbwifi; do
   [ -f "$MODPATH/system/xbin/$bin" ] && set_perm "$MODPATH/system/xbin/$bin" 0 0 0755
 done
 
-ui_print "- Drivers de dongle WiFi vem como .ko (nao mais built-in):"
+FWCOUNT=$(find "$MODPATH/system/vendor/firmware" -type f 2>/dev/null | wc -l)
+ui_print "- Drivers de dongle WiFi vem como .ko (nao mais built-in),"
+ui_print "  com $FWCOUNT firmwares para /vendor/firmware:"
 ui_print "    usbwifi        carrega o driver do dongle plugado"
 ui_print "    usbwifi -l     lista os drivers disponiveis"
 
