@@ -41,6 +41,13 @@ MOD_VERSIONCODE=41
 BUILD_CROSS_COMPILE=$DIR/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 KERNEL_LLVM_BIN=$DIR/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
 CLANG_TRIPLE=aarch64-linux-gnu-
+STRIP=${BUILD_CROSS_COMPILE}strip
+
+# NAO colocar ccache no REAL_CC enquanto CONFIG_DEBUG_INFO=y: com "-g" o
+# ccache separa preprocessamento e compilacao, e os labels locais de DWARF
+# ficam orfaos -- o link morre em
+#   rtl8812au/core/rtw_recv.o:(.debug_info+0x...): undefined reference to `.Linfo_string6102'
+# Se um dia CONFIG_DEBUG_INFO for desligado, ccache passa a valer a pena.
 
 MAKE_ARGS=(
 	-C "$DIR"
@@ -69,7 +76,7 @@ fi
 
 # Compila o kernel
 mkdir -p "$OUT"
-make -j"$JOBS" "${MAKE_ARGS[@]}" "$DEFCONFIG_NAME"
+make "${MAKE_ARGS[@]}" "$DEFCONFIG_NAME"
 make -j"$JOBS" "${MAKE_ARGS[@]}"
 
 if [ ! -e "$OUT/arch/$ARCH/boot/Image.gz-dtb" ]; then
@@ -87,7 +94,13 @@ mapfile -t DTBO_FILES < <(find "$DTS_DIR/samsung/" -name "${CHIPSET_NAME}-sec-${
 # dentro do $OUT; um find posterior acharia as copias que acabamos de por la).
 mapfile -t MODULES < <(find "$OUT" \( -path "$AK3" -o -path "$MAG" \) -prune -o -name '*.ko' -print)
 rm -f "$DIST/modules"/*.ko
-[ ${#MODULES[@]} -gt 0 ] && cp -f "${MODULES[@]}" "$DIST/modules/"
+if [ ${#MODULES[@]} -gt 0 ]; then
+	cp -f "${MODULES[@]}" "$DIST/modules/"
+	# CONFIG_DEBUG_INFO=y deixa ~95% de cada .ko em DWARF, que so serve pra
+	# debug no host. Os .ko daqui pra frente saem stripped (can327.ko: 495K -> 26K).
+	"$STRIP" --strip-debug "$DIST/modules"/*.ko
+	mapfile -t MODULES < <(find "$DIST/modules" -name '*.ko')
+fi
 
 # --- 1. Zip flashavel KERNEL-ONLY (nao toca particao; ver packaging/) --------
 # So o zImage + o anykernel enxuto. Sem system/, vendor/, ramdisk-patch/,
