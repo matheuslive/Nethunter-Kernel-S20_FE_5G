@@ -1,0 +1,5 @@
+# TODO
+
+- [ ] **Suporte a dongle USB WiFi para monitor mode** (o caminho recomendado — o rádio interno é inviável, ver memória do projeto): quando definir/conseguir um adaptador (AR9271/ath9k_htc é o mais recomendado; RTL8812AU também), colocar os firmwares dos chips (os de `AnyKernel3/vendor/etc/firmware_mnt/image/`: `ar9271.fw`, `htc_9271.fw`, `rtlwifi`, etc.) no path que o driver procura (`/vendor/firmware` ou `/lib/firmware`) via módulo Magisk (magic mount), e preparar um helper de monitor+injection para o `wlan1`. Os drivers já estão compilados no kernel (adicionado 2026-08-06)
+- [ ] **Apagar o `~/moncap` do device** (`/data/data/com.termux/files/home/moncap`) — o monitor mode no rádio interno trava o driver em D-state (hard reboot); o helper não deve ser usado (adicionado 2026-08-06)
+- [ ] **Decisão adiada: base do kernel.** Avaliar migrar do Nethunter (4.19.113) para o `~/Android/not_samsung.sm8250-4.19` (4.19.**325** + KernelSU + Baseband-guard) como base — objetivamente mais atualizado e com o mesmo suporte a WiFi/dongle. O usuário flashou o Nethunter nesta sessão; reconsiderar se/quando fizer sentido (adicionado 2026-08-06)
