@@ -173,13 +173,15 @@ fi
 # caminho, entao /vendor/firmware serve. NAO mexer em firmware_class.path: ele
 # aponta para /vendor/firmware_mnt/image e outros subsistemas dependem disso.
 #
-# Vai em $MODPATH/vendor/, nao em $MODPATH/system/vendor/: neste device
-# /system/vendor e um SYMLINK para /vendor, e o magic mount nao o atravessa --
-# medido no device em 2026-08-08, nenhum dos 8 firmwares tinha chegado em
-# /vendor/firmware/. Modulo com /vendor separado usa a raiz do modulo.
-mkdir -p "$MAG/vendor/firmware"
-cp -a "$DIR/packaging/firmware/." "$MAG/vendor/firmware/"
-rm -f "$MAG/vendor/firmware/README.md"   # doc do repo, nao vai pro device
+# Fica em $MODPATH/system/vendor/ mesmo, apesar de /system/vendor ser um
+# symlink para /vendor: o Magisk resolve isso sozinho (monta tmpfs em
+# /vendor/firmware, faz bind dos 57 arquivos originais e acrescenta os nossos).
+# Confirmado no device em 2026-08-08 -- /vendor/firmware/ath9k_htc/ tem os dois
+# .fw do pacote. Nao trocar por $MODPATH/vendor/ "por seguranca": esse caminho
+# nao esta validado aqui, e o que esta no ar funciona.
+mkdir -p "$MAG/system/vendor/firmware"
+cp -a "$DIR/packaging/firmware/." "$MAG/system/vendor/firmware/"
+rm -f "$MAG/system/vendor/firmware/README.md"   # doc do repo, nao vai pro device
 
 # Avisa se algum modulo declara firmware que nao esta empacotado -- sem isto,
 # habilitar um driver novo faria o firmware sumir em silencio. Os ausentes ja
@@ -198,7 +200,7 @@ if command -v /sbin/modinfo >/dev/null 2>&1; then
 	for ko in "${MODULES[@]}"; do
 		/sbin/modinfo -F firmware "$ko" 2>/dev/null
 	done | sort -u | while read -r fw; do
-		[ -f "$MAG/vendor/firmware/$fw" ] && continue
+		[ -f "$MAG/system/vendor/firmware/$fw" ] && continue
 		case " ${FW_KNOWN_MISSING[*]} " in *" $fw "*) continue ;; esac
 		echo "!! firmware declarado e ausente: $fw" >&2
 	done

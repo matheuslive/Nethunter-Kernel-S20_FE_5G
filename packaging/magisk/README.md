@@ -12,14 +12,18 @@ additions" do `anykernel.sh` original tentavam fazer escrevendo em `/system` e
 | Módulos `.ko` do kernel | `/system/lib/modules/` | magic mount |
 | `hid-keyboard`, `usbwifi` | `/system/bin/` | magic mount |
 | Descriptors HID (`*.bin`) | `/system/etc/nethunter/` | magic mount |
-| Firmware dos dongles | `/vendor/firmware/` | magic mount (`$MODPATH/vendor/`) |
+| Firmware dos dongles | `/vendor/firmware/` | magic mount (`system/vendor/`) |
 | `init.nethunter.rc` | importado no boot | `overlay.d/sbin/` |
 
-⚠️ **Binário vai em `system/bin`, nunca em `system/xbin`** — o Magisk 30700
-não monta `xbin` (o diretório nem existe em One UI 13), e o arquivo some em
-silêncio. **Firmware vai na raiz do módulo (`$MODPATH/vendor/`)**, não em
-`$MODPATH/system/vendor/`: aqui `/system/vendor` é symlink para `/vendor` e o
-magic mount não o atravessa. Os dois casos morderam este módulo até 2026-08-08.
+⚠️ **Binário vai em `system/bin`, nunca em `system/xbin`** — o Magisk 30700 não
+monta `xbin` (o diretório nem existe em One UI 13) e o arquivo some em silêncio.
+Foi o que quebrou o `hid-keyboard` e o `usbwifi` até 2026-08-08.
+
+O firmware, esse, continua em `$MODPATH/system/vendor/` mesmo com
+`/system/vendor` sendo symlink para `/vendor`: o Magisk resolve sozinho (monta
+tmpfs em `/vendor/firmware` e faz bind dos originais). Conferir pelo caminho
+real do arquivo — `/vendor/firmware/ath9k_htc/htc_9271-1.4.0.fw`, não
+`htc_9271.fw` — senão parece ausente quando está lá.
 
 ## O que é sólido e o que é experimental
 

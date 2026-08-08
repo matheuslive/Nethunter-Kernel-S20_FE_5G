@@ -47,6 +47,30 @@ ui_print "- Ajustando permissoes"
 set_perm_recursive "$MODPATH" 0 0 0755 0644
 set_perm "$MODPATH/system/bin/battctl" 0 0 0755
 
+# --- uso imediato, sem reboot ------------------------------------------------
+#
+# O magic mount do /system/bin so acontece no boot, entao ate reiniciar o
+# battctl nao estaria no PATH. /debug_ramdisk e o tmpfs do proprio Magisk
+# (MAGISKTMP): e o PRIMEIRO diretorio do PATH -- inclusive no PATH que o su
+# monta -- e some sozinho no reboot, quando o magic mount assume. Copia, nao
+# symlink: o modulo ainda esta em modules_update/ e muda de lugar no boot.
+if [ -d /debug_ramdisk ] && cp -f "$MODPATH/system/bin/battctl" /debug_ramdisk/battctl 2>/dev/null; then
+  chmod 0755 /debug_ramdisk/battctl
+  ui_print "- battctl disponivel AGORA (via /debug_ramdisk, sem reboot)"
+  IMMEDIATE=1
+else
+  ui_print "! nao consegui publicar o battctl sem reboot; use o caminho completo:"
+  ui_print "  sh $MODPATH/system/bin/battctl status"
+  IMMEDIATE=0
+fi
+
+# Config ja preenchida de uma instalacao anterior: aplica agora, senao so teria
+# efeito no proximo boot (quando o service.sh roda). Config toda comentada da
+# "0 parametro(s) aplicado(s)" e nao muda nada.
+if [ "$IMMEDIATE" = 1 ]; then
+  /debug_ramdisk/battctl apply 2>&1 | while read -r l; do ui_print "  $l"; done
+fi
+
 ui_print " "
 ui_print "  battctl status              estado e parametros ativos"
 ui_print "  battctl limit 80            para de carregar em 80%"

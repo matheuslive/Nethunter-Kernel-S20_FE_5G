@@ -11,12 +11,27 @@
 #   usbwifi -l           lista os modulos disponiveis
 #   usbwifi -r <modulo>  descarrega
 
-MODDIR=/system/lib/modules
-
 die() { echo "usbwifi: $*" >&2; exit 1; }
 
-[ -d "$MODDIR" ] || die "$MODDIR nao existe (o modulo Magisk esta instalado?)"
-[ -f "$MODDIR/modules.alias" ] || die "$MODDIR/modules.alias faltando"
+# O -h vem antes de procurar os .ko: ajuda tem que funcionar mesmo sem eles.
+case "${1:-}" in
+  -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
+# Onde estao os .ko. Depois do reboot e o /system/lib/modules do magic mount,
+# mas ate o primeiro boot depois da instalacao esse mount ainda nao existe (ou
+# pior: existe com os .ko da instalacao ANTERIOR). Por isso o diretorio do
+# proprio modulo em /data/adb vem primeiro -- modules_update/ e onde o Magisk
+# poe a instalacao pendente, modules/ e a ativa.
+MODID=nethunter_companion_r8q
+for d in "/data/adb/modules_update/$MODID/system/lib/modules" \
+         "/data/adb/modules/$MODID/system/lib/modules" \
+         /system/lib/modules; do
+	[ -f "$d/modules.alias" ] || continue
+	MODDIR=$d
+	break
+done
+[ -n "${MODDIR:-}" ] || die "nao achei os .ko (o modulo Magisk esta instalado?)"
 
 case "${1:-}" in
   -l|--list)
@@ -27,10 +42,6 @@ case "${1:-}" in
     [ -n "${2:-}" ] || die "-r exige o nome do modulo"
     modprobe -d "$MODDIR" -r "$2" || die "nao consegui descarregar $2"
     echo "usbwifi: $2 descarregado"
-    exit 0
-    ;;
-  -h|--help)
-    sed -n '2,14p' "$0" | sed 's/^# \{0,1\}//'
     exit 0
     ;;
 esac

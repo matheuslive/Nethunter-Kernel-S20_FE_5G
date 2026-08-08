@@ -26,6 +26,11 @@ LOG=/data/adb/nethunter-battery.log
 
 die() { echo "battctl: $*" >&2; exit 1; }
 
+# O -h vem antes da checagem do sysfs: ajuda tem que funcionar em qualquer lugar.
+case "${1:-}" in
+	-h|--help|help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
 [ -d "$PSY" ] || die "$PSY nao existe -- este device nao usa o sec_battery?"
 
 # --- tabela de parametros ----------------------------------------------------
@@ -264,6 +269,6 @@ case "${1:-status}" in
 		echo "         chaves em $CONF antes, senao o service.sh reaplica."
 		;;
 
-	-h|--help|help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//' ;;
+	# -h ja foi tratado la em cima, antes da checagem do sysfs.
 	*) die "comando desconhecido: $1 (battctl -h)" ;;
 esac
