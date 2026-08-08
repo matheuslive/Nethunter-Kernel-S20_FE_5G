@@ -60,7 +60,8 @@ ui_print "    usbwifi -l     lista os drivers disponiveis"
 ui_print "- Publicando sem reboot:"
 
 for bin in hid-keyboard usbwifi; do
-  if [ -d /debug_ramdisk ] && cp -f "$MODPATH/system/bin/$bin" "/debug_ramdisk/$bin" 2>/dev/null; then
+  SRC=$MODPATH/system/bin/$bin
+  if [ -d /debug_ramdisk ] && cp -f "$SRC" "/debug_ramdisk/$bin" 2>/dev/null; then
     chmod 0755 "/debug_ramdisk/$bin"
     ui_print "    $bin ja esta no PATH"
   else

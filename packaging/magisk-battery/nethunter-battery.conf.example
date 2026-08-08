@@ -53,9 +53,16 @@
 
 # Segundos de espera depois do sys.boot_completed antes de aplicar. O framework
 # escreve em batt_full_capacity ao restaurar o estado do "Proteger bateria";
-# quem escreve por ultimo vence.
-BOOT_DELAY_SEC=20
+# quem escreve por ultimo vence. Default quando ausente: 20.
+#BOOT_DELAY_SEC=20
 
 # Se > 0, reaplica FULL_CAPACITY a cada N segundos caso algo o altere (o app
-# da One UI faz isso ao ser mexido). 0 desliga o watchdog.
-WATCHDOG_SEC=0
+# da One UI faz isso ao ser mexido). 0 ou ausente desliga o watchdog.
+#WATCHDOG_SEC=0
+
+# Tudo acima e template comentado: documenta as chaves e as faixas, e nao tem
+# efeito nenhum. O que vale e o que estiver na secao abaixo, onde o battctl
+# grava (e de onde ele le). Da para editar a secao a mao; depois rode
+# "battctl apply". Chave repetida: vale a ultima.
+
+# === Configurado (o battctl escreve daqui para baixo) ===

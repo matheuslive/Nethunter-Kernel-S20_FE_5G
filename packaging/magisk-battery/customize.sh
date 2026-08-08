@@ -54,7 +54,8 @@ set_perm "$MODPATH/system/bin/battctl" 0 0 0755
 # (MAGISKTMP): e o PRIMEIRO diretorio do PATH -- inclusive no PATH que o su
 # monta -- e some sozinho no reboot, quando o magic mount assume. Copia, nao
 # symlink: o modulo ainda esta em modules_update/ e muda de lugar no boot.
-if [ -d /debug_ramdisk ] && cp -f "$MODPATH/system/bin/battctl" /debug_ramdisk/battctl 2>/dev/null; then
+BIN=$MODPATH/system/bin/battctl
+if [ -d /debug_ramdisk ] && cp -f "$BIN" /debug_ramdisk/battctl 2>/dev/null; then
   chmod 0755 /debug_ramdisk/battctl
   ui_print "- battctl disponivel AGORA (via /debug_ramdisk, sem reboot)"
   IMMEDIATE=1

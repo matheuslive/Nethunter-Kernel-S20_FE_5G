@@ -28,6 +28,26 @@ sysfs, e é nele que este módulo trabalha.
 A configuração fica em `/data/adb` de propósito: sobrevive a atualizar ou
 reinstalar o módulo, e o `customize.sh` nunca sobrescreve uma existente.
 
+### Formato da configuração
+
+O arquivo tem duas partes. O corpo é **template comentado** — documenta as
+chaves, as faixas e o efeito de cada uma, e não vale nada por si. O que vale
+fica numa seção no fim:
+
+```
+#FLOAT_VOLTAGE=4200          <- template: doc, sem efeito
+
+# === Configurado (o battctl escreve daqui para baixo) ===
+FULL_CAPACITY=80
+FAST_CURRENT=1800
+```
+
+`set` e `limit` gravam sempre nessa seção. Editar a seção à mão também
+funciona (rode `battctl apply` depois). Qualquer `apply` ou `set` normaliza o
+arquivo: linha ativa escrita no corpo migra para a seção, chave repetida
+colapsa numa só (vence a última) e espaços/comentário inline são limpos — ou
+seja, dá para ver de relance tudo o que está fora do padrão do device tree.
+
 ## Uso
 
 ```sh

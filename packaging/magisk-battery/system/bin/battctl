@@ -40,6 +40,9 @@ esac
 # Os limites sao os que o proprio driver valida em sec_battery_sysfs.c: escrever
 # fora da faixa e ignorado em silencio pelo kernel, entao barramos aqui para o
 # erro aparecer. Temperatura e em decimos de grau (500 = 50.0 C).
+#
+# As linhas abaixo passam de 85 colunas por serem um registro por linha; a
+# SAIDA respeita o limite (o "show" quebra a descricao em linha propria).
 PARAMS='
 FULL_CAPACITY|batt_full_capacity|0|100|%|para de carregar nesta carga (0 = desliga; recarrega em -2%)
 FLOAT_VOLTAGE|batt_tune_float_voltage|4001|4400|mV|tensao de fim de carga (4400 = stock, 4100 poupa a celula)
@@ -67,7 +70,9 @@ param_field() {  # param_field <chave> <n-do-campo>
 	done
 }
 
-keys() { echo "$PARAMS" | while IFS='|' read -r k _; do [ -n "$k" ] && echo "$k"; done; }
+keys() {
+	echo "$PARAMS" | while IFS='|' read -r k _; do [ -n "$k" ] && echo "$k"; done
+}
 
 # --- helpers de sysfs --------------------------------------------------------
 
@@ -114,27 +119,52 @@ log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
 
 conf_get() {  # conf_get <chave> -- valor no arquivo, vazio se ausente/comentado
 	[ -f "$CONF" ] || return 0
-	sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\([^#[:space:]]*\).*/\1/p" "$CONF" | tail -1
+	sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\([^#[:space:]]*\).*/\1/p" \
+		"$CONF" | tail -1
+}
+
+# Tudo que o battctl grava vai para uma secao no FIM do arquivo. O corpo acima
+# dela fica intocado: e o template comentado, que serve de documentacao das
+# chaves e das faixas. Como a secao e sempre a ultima coisa do arquivo, gravar
+# = remover a chave de onde estiver e acrescentar no fim.
+CONF_MARK='# === Configurado (o battctl escreve daqui para baixo) ==='
+
+# Junta TODA linha ativa (esteja ela onde estiver) na secao do fim, uma por
+# chave, e deixa o corpo so com os comentarios. Chave repetida: vence a ultima,
+# na posicao da primeira. Linha comentada nunca e tocada -- e a documentacao.
+conf_normalize() {
+	[ -f "$CONF" ] || : > "$CONF"
+	awk -v mark="$CONF_MARK" '
+		/^[[:space:]]*[A-Za-z_][A-Za-z_0-9]*[[:space:]]*=/ {
+			eq = index($0, "=")
+			k = substr($0, 1, eq - 1); gsub(/[[:space:]]/, "", k)
+			v = substr($0, eq + 1)
+			h = index(v, "#"); if (h) v = substr(v, 1, h - 1)
+			gsub(/^[[:space:]]+/, "", v); gsub(/[[:space:]]+$/, "", v)
+			if (!(k in val)) order[++n] = k
+			val[k] = v
+			next
+		}
+		$0 == mark { next }
+		{ body[++b] = $0 }
+		END {
+			# corpo sem as linhas em branco do fim, para nao acumular uma a
+			# cada normalizacao
+			while (b > 0 && body[b] ~ /^[[:space:]]*$/) b--
+			for (i = 1; i <= b; i++) print body[i]
+			print ""
+			print mark
+			for (i = 1; i <= n; i++) print order[i] "=" val[order[i]]
+		}
+	' "$CONF" > "$CONF.tmp" && mv -f "$CONF.tmp" "$CONF"
 }
 
 conf_set() {  # conf_set <chave> <valor>
 	[ -f "$CONF" ] || : > "$CONF"
-	# Duas expressoes (uma para a linha ativa, outra para a comentada) em vez
-	# de um "#\?": o toybox grep/sed do Android NAO entende o "\?" de BRE, que
-	# e extensao GNU. Com ele o casamento falhava, o else corria e cada set
-	# virava uma duplicata no fim do arquivo. So aparecia no boot e no
-	# instalador -- num shell com o Termux no PATH o grep e o GNU, que entende.
-	if grep -q -e "^[[:space:]]*$1[[:space:]]*=" \
-	           -e "^[[:space:]]*#[[:space:]]*$1[[:space:]]*=" "$CONF"; then
-		sed -i -e "s|^[[:space:]]*$1[[:space:]]*=.*|$1=$2|" \
-		       -e "s|^[[:space:]]*#[[:space:]]*$1[[:space:]]*=.*|$1=$2|" "$CONF"
-		# Duplicata herdada de versao anterior do battctl viraria N linhas
-		# iguais depois da substituicao: mantem so a primeira.
-		awk -v k="$1" '$0 ~ "^" k "=" { if (seen++) next } { print }' \
-			"$CONF" > "$CONF.tmp" && mv -f "$CONF.tmp" "$CONF"
-	else
-		echo "$1=$2" >> "$CONF"
-	fi
+	# Acrescenta e normaliza: como a ultima ocorrencia vence, isso atualiza a
+	# chave se ela ja existia, em qualquer lugar do arquivo.
+	printf '%s=%s\n' "$1" "$2" >> "$CONF"
+	conf_normalize
 }
 
 validate() {  # validate <chave> <valor>
@@ -151,7 +181,10 @@ apply_key() {  # apply_key <chave> <valor> -- silencioso no modo boot
 	attr=$(param_field "$1" attr)
 	[ -n "$attr" ] || return 1
 	if [ ! -e "$PSY/$attr" ]; then
-		[ "$BOOT" = 1 ] || echo "battctl: $1 ignorado ($attr nao existe -- kernel sem ENG_BATTERY_CONCEPT?)" >&2
+		[ "$BOOT" = 1 ] || {
+			echo "battctl: $1 ignorado -- $attr nao existe" >&2
+			echo "         (kernel sem CONFIG_ENG_BATTERY_CONCEPT?)" >&2
+		}
 		[ "$BOOT" = 1 ] && log "SKIP $1=$2 ($attr ausente)"
 		return 1
 	fi
@@ -165,6 +198,9 @@ apply_key() {  # apply_key <chave> <valor> -- silencioso no modo boot
 
 cmd_apply() {
 	[ -f "$CONF" ] || die "$CONF nao existe"
+	# Arruma o arquivo antes de ler: e o que migra para a secao um conf antigo
+	# (ou editado a mao no corpo) sem exigir um "set". Idempotente.
+	conf_normalize
 	n=0
 	for k in $(keys); do
 		v=$(conf_get "$k")
@@ -202,7 +238,10 @@ cmd_status() {
 	else
 		echo "  [sem ENG_BATTERY_CONCEPT -- so batt_full_capacity/slate/store]"
 	fi
-	printf '  %-22s %8s %8s  %-12s %s\n' PARAMETRO ATIVO CONFIG POSSIVEIS UNIDADE
+	# Tudo daqui para baixo cabe em 85 colunas: 2+21+1+6+1+7+2+11+1+4+2 = 58.
+	# O sed no fim do grupo tira o padding a direita da ultima coluna.
+	{
+	printf '  %-21s %6s %7s  %-11s %-4s\n' PARAMETRO ATIVO CONFIG POSSIVEIS UNID
 	# Uma passada so pelo PARAMS: chamar param_field por campo custaria um
 	# subshell por celula da tabela.
 	echo "$PARAMS" | while IFS='|' read -r k a lo hi u d; do
@@ -213,39 +252,45 @@ cmd_status() {
 		# Faixa continua de inteiros, ou enumeracao quando sao dois valores.
 		if [ "$lo" = 0 ] && [ "$hi" = 1 ]; then rng="0|1"; else rng="$lo..$hi"; fi
 
-		note=""
+		flag=""
 		if [ "$k" = FLOAT_VOLTAGE ]; then
 			# O show le battery->pdata->chg_float_voltage, que o store nao
 			# atualiza (ele repassa o valor ao charger via VOLTAGE_MAX): aqui
 			# sai o numero do device tree mesmo com override em vigor. Quem
 			# confirma o valor real e o dmesg do charger.
-			note="  (ATIVO vem do device tree; nao mostra override)"
+			flag=" *"
 		elif [ "$cfg" != "-" ] && [ "$cfg" != "$val" ]; then
 			# Config gravada que nao bateu com o kernel: ou nao foi aplicada
 			# ainda (mexeram no arquivo na mao), ou algo sobrescreveu depois.
-			note="  <- divergente; 'battctl apply' reaplica"
+			flag=" !"
 		fi
-		printf '  %-22s %8s %8s  %-12s %s%s\n' "$k" "$val" "$cfg" "$rng" "$u" "$note"
+		printf '  %-21s %6s %7s  %-11s %-4s%s\n' "$k" "$val" "$cfg" "$rng" "$u" "$flag"
 	done
-	printf '  %-22s %8s %8s  %-12s %s\n' slate_mode "$(rd batt_slate_mode)" - "0|1|2" \
-		"0=carga normal, 1=cortada, 2=smart"
+	printf '  %-21s %6s %7s  %-11s %-4s\n' \
+		slate_mode "$(rd batt_slate_mode)" - "0|1|2" -
+	} | sed 's/[[:space:]]*$//'
 	echo
-	echo "  ATIVO = valor agora no kernel;  CONFIG = o que esta em $CONF"
-	echo "  ('-' = nao configurado: o kernel fica com o valor do device tree)"
+	echo "  ATIVO = no kernel agora;  CONFIG = no arquivo ('-' = nao configurado)"
+	echo "  * leitura nao reflete override (veja o dmesg)   ! CONFIG != ATIVO"
+	echo "  slate: 0=normal  1=carga cortada  2=smart"
+	echo "  arquivo: $CONF"
 }
 
 cmd_show() {
 	echo "Chaves conhecidas:"
+	# Descricao em linha propria: junto com o nome ela passaria de 85 colunas.
 	echo "$PARAMS" | while IFS='|' read -r k a lo hi u d; do
 		[ -n "$k" ] || continue
-		printf '  %-22s %s..%s %-5s %s\n' "$k" "$lo" "$hi" "$u" "$d"
+		printf '  %-21s %-11s %s\n' "$k" "$lo..$hi" "$u"
+		printf '      %s\n' "$d"
 	done
 	echo
 	if [ -f "$CONF" ]; then
-		echo "--- $CONF ---"
+		echo "--- configuracao ---"
+		echo "($CONF)"
 		cat "$CONF"
 	else
-		echo "($CONF ainda nao existe)"
+		echo "(ainda nao existe: $CONF)"
 	fi
 }
 
@@ -276,13 +321,9 @@ case "${1:-status}" in
 		validate "$2" "$3"
 		apply_key "$2" "$3" || die "nao apliquei $2"
 		conf_set "$2" "$3"
-		if [ "${WR_CONFIRMED:-0}" = 1 ]; then
-			echo "battctl: $2 = $3 $(param_field "$2" unit) (aplicado e gravado)"
-		else
-			echo "battctl: $2 = $3 $(param_field "$2" unit) (gravado; o driver"
-			echo "         nao ecoa este atributo de volta -- confira o efeito"
-			echo "         em 'battctl status' ou no dmesg)"
-		fi
+		echo "battctl: $2 = $3 $(param_field "$2" unit) (aplicado e gravado)"
+		[ "${WR_CONFIRMED:-0}" = 1 ] || \
+			echo "  o driver nao ecoa este atributo: o status nao confirma, veja o dmesg"
 		;;
 
 	get)
@@ -296,7 +337,8 @@ case "${1:-status}" in
 		[ $# -eq 2 ] || die "uso: battctl limit <pct|off>"
 		v=$2; [ "$v" = off ] && v=0
 		validate FULL_CAPACITY "$v"
-		[ "$v" != 0 ] && [ "$v" -lt 50 ] && die "limite abaixo de 50% nao faz sentido para uso diario"
+		[ "$v" != 0 ] && [ "$v" -lt 50 ] && \
+			die "limite abaixo de 50% nao faz sentido no uso diario"
 		apply_key FULL_CAPACITY "$v" && conf_set FULL_CAPACITY "$v"
 		if [ "$v" = 0 ]; then
 			echo "battctl: limite de carga desligado"
@@ -307,7 +349,8 @@ case "${1:-status}" in
 
 	charge)
 		case "${2:-}" in
-			off) wr batt_slate_mode 1 && echo "battctl: carga cortada (slate mode) -- USB segue conectado" ;;
+			off) wr batt_slate_mode 1 &&
+			     echo "battctl: carga cortada (slate) -- USB segue conectado" ;;
 			on)  wr batt_slate_mode 0 && echo "battctl: carga liberada" ;;
 			*)   die "uso: battctl charge on|off" ;;
 		esac
@@ -326,9 +369,10 @@ case "${1:-status}" in
 		wr batt_full_capacity 0 && conf_set FULL_CAPACITY 0
 		wr batt_slate_mode 0
 		echo "battctl: limite de carga e slate mode desligados."
-		echo "battctl: float voltage, correntes e temperaturas so voltam ao"
-		echo "         padrao do device tree depois de um reboot -- comente as"
-		echo "         chaves em $CONF antes, senao o service.sh reaplica."
+		echo "  float voltage, correntes e temperaturas so voltam ao padrao do"
+		echo "  device tree depois de um reboot. Antes dele, tire as chaves da"
+		echo "  secao 'Configurado' -- senao o service.sh reaplica no boot:"
+		echo "  $CONF"
 		;;
 
 	# -h ja foi tratado la em cima, antes da checagem do sysfs.

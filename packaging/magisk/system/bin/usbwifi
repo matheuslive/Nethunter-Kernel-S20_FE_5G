@@ -83,7 +83,8 @@ echo "usbwifi: nenhum dongle conhecido plugado." >&2
 echo "         dongles vistos pelo USB:" >&2
 for dev in /sys/bus/usb/devices/*; do
 	[ -f "$dev/idVendor" ] || continue
-	echo "           $(cat "$dev/idVendor"):$(cat "$dev/idProduct") $(cat "$dev/product" 2>/dev/null)" >&2
+	echo "           $(cat "$dev/idVendor"):$(cat "$dev/idProduct")" \
+	     "$(cat "$dev/product" 2>/dev/null)" >&2
 done
 echo "         'usbwifi -l' lista os drivers disponiveis para carregar na mao." >&2
 exit 1

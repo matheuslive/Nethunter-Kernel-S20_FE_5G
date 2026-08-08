@@ -23,7 +23,8 @@ while [ "$(getprop sys.boot_completed)" != 1 ] && [ $i -lt 120 ]; do
 	i=$((i + 1))
 done
 
-delay=$(sed -n 's/^[[:space:]]*BOOT_DELAY_SEC[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' "$CONF" | tail -1)
+delay=$(sed -n 's/^[[:space:]]*BOOT_DELAY_SEC[[:space:]]*=[[:space:]]*\([0-9]*\).*/\1/p' \
+	"$CONF" | tail -1)
 sleep "${delay:-20}"
 
 log "boot: aplicando $CONF"
