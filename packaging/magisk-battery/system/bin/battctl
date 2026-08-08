@@ -75,13 +75,37 @@ has_eng() { [ -e "$PSY/batt_tune_float_voltage" ]; }
 
 rd() { [ -r "$PSY/$1" ] && cat "$PSY/$1" 2>/dev/null; }
 
-wr() {  # wr <attr> <valor>
+# wr <attr> <valor>
+#
+# O veredito NAO pode sair do codigo de retorno do write: sec_bat_store_attrs()
+# comeca com "int ret = -EINVAL" e NENHUM handler batt_tune_* faz "ret = count"
+# (batt_full_capacity, store_mode e batt_slate_mode fazem -- por isso so os
+# tune reclamavam). O valor e aplicado e o write(2) devolve erro assim mesmo.
+#
+# Entao: releitura manda. Se ela nao confirmar, ainda ha o caso legitimo do
+# atributo que nao ecoa o que recebeu -- batt_tune_float_voltage repassa o
+# valor ao charger via VOLTAGE_MAX, mas o show le battery->pdata, que nao muda.
+# Como a faixa ja foi validada contra a do driver antes de chegar aqui, um
+# batt_tune_* nessa situacao conta como aplicado.
+#
+# Deixa em WR_CONFIRMED se a releitura confirmou (1) ou nao (0), para quem
+# chama poder ser honesto na mensagem.
+wr() {
+	WR_CONFIRMED=0
 	[ -e "$PSY/$1" ] || { echo "battctl: $1 nao existe neste kernel" >&2; return 1; }
-	if ! echo "$2" > "$PSY/$1" 2>/dev/null; then
-		echo "battctl: falhou escrever $2 em $1 (root?)" >&2
-		return 1
+
+	echo "$2" > "$PSY/$1" 2>/dev/null
+	rc=$?
+
+	if [ "$(rd "$1")" = "$2" ]; then
+		WR_CONFIRMED=1
+		return 0
 	fi
-	return 0
+	[ "$rc" = 0 ] && return 0
+	case "$1" in batt_tune_*) return 0 ;; esac
+
+	echo "battctl: falhou escrever $2 em $1 (root?)" >&2
+	return 1
 }
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
@@ -170,7 +194,13 @@ cmd_status() {
 	for k in $(keys); do
 		attr=$(param_field "$k" attr)
 		[ -e "$PSY/$attr" ] || continue
-		printf '  %-22s %s %s\n' "$k" "$(rd "$attr")" "$(param_field "$k" unit)"
+		# O show do float voltage le battery->pdata->chg_float_voltage, que o
+		# store nao atualiza (ele repassa o valor ao charger via VOLTAGE_MAX).
+		# Ou seja: aqui sai sempre o numero do device tree, mesmo com override
+		# em vigor. Quem confirma o valor real e o dmesg do charger.
+		note=""
+		[ "$k" = FLOAT_VOLTAGE ] && note="   <- do device tree; nao mostra override"
+		printf '  %-22s %s %s%s\n' "$k" "$(rd "$attr")" "$(param_field "$k" unit)" "$note"
 	done
 	slate=$(rd batt_slate_mode)
 	echo "  slate_mode           : ${slate:-?} (0=carga normal, 1=carga cortada)"
@@ -220,7 +250,13 @@ case "${1:-status}" in
 		validate "$2" "$3"
 		apply_key "$2" "$3" || die "nao apliquei $2"
 		conf_set "$2" "$3"
-		echo "battctl: $2 = $3 $(param_field "$2" unit) (aplicado e gravado)"
+		if [ "${WR_CONFIRMED:-0}" = 1 ]; then
+			echo "battctl: $2 = $3 $(param_field "$2" unit) (aplicado e gravado)"
+		else
+			echo "battctl: $2 = $3 $(param_field "$2" unit) (gravado; o driver"
+			echo "         nao ecoa este atributo de volta -- confira o efeito"
+			echo "         em 'battctl status' ou no dmesg)"
+		fi
 		;;
 
 	get)

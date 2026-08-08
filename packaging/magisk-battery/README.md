@@ -75,3 +75,14 @@ seu.
   tree depois de um reboot (com as chaves comentadas no arquivo, senão o
   `service.sh` reaplica).
 - **Temperaturas são em décimos de grau**: `500` = 50,0 °C.
+- **O `write` nesses atributos "falha" mesmo funcionando.**
+  `sec_bat_store_attrs()` começa com `ret = -EINVAL` e nenhum handler
+  `batt_tune_*` faz `ret = count` — só `batt_full_capacity`, `store_mode` e
+  `batt_slate_mode` fazem. O valor é aplicado e o `write(2)` devolve erro assim
+  mesmo, então um `echo ... > batt_tune_fast_charge_current` na mão sempre
+  reclama. O `battctl` decide pela releitura, não pelo código de retorno.
+- **`FLOAT_VOLTAGE` não pode ser conferido pela leitura.** O `store` repassa o
+  valor ao charger (`POWER_SUPPLY_PROP_VOLTAGE_MAX`), mas o `show` lê
+  `battery->pdata->chg_float_voltage`, que continua com o número do device
+  tree. O `status` sinaliza isso na linha; para confirmar o valor real, veja o
+  `dmesg` do charger. Medido: `set FLOAT_VOLTAGE 4200` → leitura segue 4270.
