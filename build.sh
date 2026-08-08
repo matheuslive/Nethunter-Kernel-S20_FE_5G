@@ -233,9 +233,32 @@ ZIPS=(
 # --- 4. Publica os zips: raiz do repo (symlink) e SD externo do S20 ----------
 #
 # O recovery so enxerga o SD externo, e a raiz do repo e onde se procura o
-# artefato mais recente sem navegar na arvore. Os symlinks da raiz sao
-# recriados a cada build (os da rodada anterior saem junto), e estao no
-# .gitignore.
+# artefato mais recente sem navegar na arvore. Nos dois lugares fica SO a build
+# mais recente de cada zip: as anteriores sao podadas, para nao ter que escolher
+# entre versoes na hora de flashar. O historico mora em build/<variant>/, que
+# nao e tocado.
+#
+# O que a poda considera "build antiga": qualquer zip de kernel do variant
+# (pega tambem os de terceiros, como o Nethunter_WirusMOD -- dai a classe
+# [Nn]et[Hh]unter, que os dois estilos de maiuscula usam) e os dois zips de
+# modulo, exceto os que acabamos de gerar.
+#
+# PRUNE fica SEM aspas nos dois "for" abaixo de proposito: e a expansao sem
+# aspas que sofre globbing. Entre aspas (ou vindo de "${array[@]/#/...}") o
+# padrao chegaria literal no rm.
+KEEP=$(printf '|%s' "${ZIPS[@]##*/}")   # "|a.zip|b.zip|c.zip"
+KEEP="$KEEP|"
+PRUNE="[Nn]et[Hh]unter*_${VARIANT}_v*.zip nethunter-companion-${VARIANT}.zip nethunter-battery-${VARIANT}.zip"
+
+(
+	cd "$DIR"
+	shopt -s nullglob
+	for f in $PRUNE; do
+		case "$KEEP" in *"|$f|"*) continue ;; esac
+		rm -f "$f" && echo ">> podado da raiz: $f"
+	done
+)
+# Symlinks (ignorados pelo git); os da rodada anterior saem antes.
 find "$DIR" -maxdepth 1 -name '*.zip' -type l -delete
 for z in "${ZIPS[@]}"; do
 	ln -sfn "${z#"$DIR"/}" "$DIR/$(basename "$z")"
@@ -250,6 +273,14 @@ if SD_DIR=$(timeout 15 ssh -o ConnectTimeout=8 -o BatchMode=yes "$SD_HOST" \
    [ -n "$SD_DIR" ]; then
 	if timeout 300 scp -q "${ZIPS[@]}" "$SD_HOST:$SD_DIR/" 2>/dev/null; then
 		echo ">> SD do S20 : $SD_HOST:$SD_DIR (${#ZIPS[@]} zips)"
+		# Poda do SD com os mesmos criterios da raiz.
+		timeout 60 ssh -o ConnectTimeout=8 -o BatchMode=yes "$SD_HOST" \
+			"cd '$SD_DIR' 2>/dev/null || exit 0
+			 for f in $PRUNE; do
+				[ -e \"\$f\" ] || continue
+				case '$KEEP' in *\"|\$f|\"*) continue ;; esac
+				rm -f -- \"\$f\" && echo '>> podado do SD: '\"\$f\"
+			 done" 2>/dev/null || true
 	else
 		echo "!! copia para $SD_HOST:$SD_DIR falhou -- copie na mao" >&2
 	fi
