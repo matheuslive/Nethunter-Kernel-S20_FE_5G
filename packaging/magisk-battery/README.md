@@ -70,7 +70,31 @@ reaplica a cada boot.
 |---|---|---|
 | `FULL_CAPACITY` (limite de carga) | ✅ | ✅ |
 | slate mode, store mode | ✅ | ✅ |
-| `FLOAT_VOLTAGE`, correntes, corrente de corte, limites térmicos | ❌ | ✅ |
+| `SIOP_LEVEL` + `SIOP_LOCK`, `WC_*`, `SKIP_SWELLING`, `SAFETY_TIMER`, `WDT_KICK_DISABLE`, `BATTERY_CYCLE` | ✅ | ✅ |
+| `FLOAT_VOLTAGE`, correntes, corrente de corte, limites térmicos, `WPC_TEMP_*` | ❌ | ✅ |
+
+### SIOP e o `siop.sh` absorvido
+
+`SIOP_LEVEL` é o throttle global de corrente: o framework o baixa com a tela
+ligada ou o aparelho quente. `SIOP_LOCK=1` deixa o atributo em `0444` depois de
+aplicar, e aí nem o framework nem o root escrevem nele (o `battctl` destranca
+sozinho quando você manda um valor novo). Isso substitui o
+`/data/adb/service.d/siop.sh`, que o instalador **importa e desativa**
+(renomeia para `siop.sh.absorvido-pelo-modulo`) — manter os dois faria os dois
+brigarem no boot. O `service.sh` do módulo roda depois do `sys.boot_completed`,
+o que fecha melhor a janela em que o framework poderia escrever primeiro.
+
+Travar o SIOP em 100 tira o principal freio térmico da carga; o que sobra para
+conter calor é `CHG_TEMP_HIGH`/`CHG_TEMP_REC` + `CHG_LIMIT_CURRENT`.
+
+### `BATTERY_CYCLE` não é cosmético
+
+Define o degrau de *age forecast*, e com ele a float voltage e o "cheio". No
+r8q os degraus são 0/300/400/700/1000 ciclos → 4380/4360/4340/4320/4270 mV.
+Baixar o número devolve a tensão de célula nova, desfazendo a proteção que o
+kernel aplica a uma velha. Depois de escrever, o `battctl` dispara
+`battery_cycle_test`, que é quem chama o `sec_bat_aging_check()` — sem isso o
+degrau só seria recalculado no próximo boot.
 
 Os `batt_tune_*` só são criados com `CONFIG_ENG_BATTERY_CONCEPT=y`, habilitado
 no `wirus_defconfig` a partir da v4.3. Sem eles o módulo instala e funciona,

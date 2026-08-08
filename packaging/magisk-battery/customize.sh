@@ -65,6 +65,20 @@ else
   IMMEDIATE=0
 fi
 
+# Absorve o /data/adb/service.d/siop.sh, se existir: o modulo passa a cuidar do
+# siop_level (valor + trava), e manter os dois faria os dois brigarem no boot.
+# O script sai renomeado, nao apagado -- reverter e so voltar o nome.
+SIOP_SH=/data/adb/service.d/siop.sh
+if [ -f "$SIOP_SH" ] && grep -q siop_level "$SIOP_SH"; then
+  lvl=$(grep -oE 'echo +[0-9]+' "$SIOP_SH" | grep -oE '[0-9]+' | tail -1)
+  grep -qE 'chmod +(a=r|444)' "$SIOP_SH" && lock=1 || lock=0
+  [ -n "$lvl" ] && grep -q "^SIOP_LEVEL=" "$CONF" || echo "SIOP_LEVEL=${lvl:-100}" >> "$CONF"
+  grep -q "^SIOP_LOCK=" "$CONF" || echo "SIOP_LOCK=$lock" >> "$CONF"
+  mv -f "$SIOP_SH" "$SIOP_SH.absorvido-pelo-modulo"
+  ui_print "- siop.sh absorvido (SIOP_LEVEL=${lvl:-100} SIOP_LOCK=$lock)"
+  ui_print "  o script saiu de service.d como siop.sh.absorvido-pelo-modulo"
+fi
+
 # Config ja preenchida de uma instalacao anterior: aplica agora, senao so teria
 # efeito no proximo boot (quando o service.sh roda). Config toda comentada da
 # "0 parametro(s) aplicado(s)" e nao muda nada.

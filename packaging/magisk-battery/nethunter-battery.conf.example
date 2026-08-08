@@ -49,7 +49,44 @@
 # implementa o desligamento; para sair, comente esta linha e reinicie.
 #STORE_MODE=1
 
-# --- comportamento do modulo -------------------------------------------------
+# --- throttle, wireless e protecoes (kernel stock ja tem estes) --------------
+
+# SIOP: throttle global de corrente. O framework baixa este nivel com a tela
+# ligada ou o aparelho quente; 100 = sem throttle. Com SIOP_LOCK=1 o arquivo
+# fica em 0444 depois de aplicado e o framework nao consegue mais baixa-lo --
+# carga rapida sempre, ao custo de perder esse freio termico (sobram
+# CHG_TEMP_HIGH/CHG_LIMIT_CURRENT). Era o que o antigo service.d/siop.sh fazia.
+#SIOP_LEVEL=100
+#SIOP_LOCK=1
+
+# Carga sem fio: 0 recusa o carregador indutivo.
+#WC_ENABLE=1
+
+# Power share (carregar outro aparelho por inducao) para nesta carga.
+#WC_TX_STOP_CAPACITY=30
+
+# Throttle termico da carga sem fio, em decimos de grau.
+#WPC_TEMP_HIGH=420
+#WPC_TEMP_REC=400
+
+# 1 DESLIGA o swelling mode -- a protecao que corta/reduz a carga em
+# temperatura alta ou baixa. Ligar isso e assumir o risco; util so em bancada.
+#SKIP_SWELLING=0
+
+# Timer de seguranca: corta a carga se ela demorar demais (protecao contra
+# celula com defeito). 1 = ligado, que e o padrao do driver.
+#SAFETY_TIMER=1
+
+# 1 para de alimentar o watchdog do charger. So para depuracao.
+#WDT_KICK_DISABLE=0
+
+# Ciclos da celula. NAO e cosmetico: define o degrau de age forecast, e com ele
+# a float voltage e o "cheio". No r8q os degraus sao 0/300/400/700/1000 ciclos
+# -> 4380/4360/4340/4320/4270 mV. Baixar este numero devolve a tensao alta de
+# uma celula nova, desfazendo a protecao que o kernel aplica a uma velha.
+#BATTERY_CYCLE=1706
+
+# --- comportamento do modulo (nao vao para o sysfs) --------------------------
 
 # Segundos de espera depois do sys.boot_completed antes de aplicar. O framework
 # escreve em batt_full_capacity ao restaurar o estado do "Proteger bateria";

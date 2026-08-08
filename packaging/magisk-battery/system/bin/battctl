@@ -19,6 +19,10 @@
 #   battctl raw <attr> [val]    le/escreve um atributo qualquer do sysfs
 #   battctl reset               desfaz o que e reversivel sem reboot
 #   battctl watchdog            reaplica FULL_CAPACITY em loop (uso do service.sh)
+#
+# Alem dos parametros do driver, o arquivo tem chaves que configuram o proprio
+# modulo (SIOP_LOCK, BOOT_DELAY_SEC, WATCHDOG_SEC) -- "battctl show" lista as
+# duas familias.
 
 PSY=/sys/class/power_supply/battery
 CONF=/data/adb/nethunter-battery.conf
@@ -28,7 +32,7 @@ die() { echo "battctl: $*" >&2; exit 1; }
 
 # O -h vem antes da checagem do sysfs: ajuda tem que funcionar em qualquer lugar.
 case "${1:-}" in
-	-h|--help|help) sed -n '2,21p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+	-h|--help|help) sed -n '2,25p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 
 [ -d "$PSY" ] || die "$PSY nao existe -- este device nao usa o sec_battery?"
@@ -58,7 +62,36 @@ TEMP_HIGH_REC_NORMAL|batt_tune_temp_high_rec_normal|-200|999|0.1C|temperatura qu
 TEMP_LOW_NORMAL|batt_tune_temp_low_normal|-200|999|0.1C|temperatura baixa que bloqueia a carga
 TEMP_LOW_REC_NORMAL|batt_tune_temp_low_rec_normal|-200|999|0.1C|temperatura baixa que libera a carga
 STORE_MODE|store_mode|0|1|-|modo loja: mantem a carga entre 70 e 80% (SO LIGA; desligar exige reboot)
+SIOP_LEVEL|siop_level|0|100|-|throttle global de corrente; 100 = sem throttle (ver SIOP_LOCK)
+WC_ENABLE|wc_enable|0|1|-|carga sem fio (0 = recusa o carregador indutivo)
+WC_TX_STOP_CAPACITY|wc_tx_stop_capacity|0|100|%|power share para de alimentar nesta carga
+WPC_TEMP_HIGH|batt_tune_wpc_temp_high|-200|999|0.1C|temperatura que throttla a carga sem fio
+WPC_TEMP_REC|batt_tune_wpc_temp_high_rec|-200|999|0.1C|temperatura que a libera de volta
+SKIP_SWELLING|batt_swelling_control|0|1|-|1 DESLIGA o swelling mode (a protecao de temperatura)
+SAFETY_TIMER|safety_timer_set|0|1|-|timer de seguranca: corta a carga se demorar demais
+WDT_KICK_DISABLE|batt_wdt_control|0|1|-|1 para de alimentar o watchdog do charger
+BATTERY_CYCLE|battery_cycle|0|9999|ciclos|ciclos da celula; define o degrau de age forecast
 '
+
+# Chaves que configuram o MODULO, nao o driver: nao tem atributo em sysfs.
+# Sem elas aqui, "battctl set BOOT_DELAY_SEC 30" morria como chave desconhecida.
+#
+# chave|min|max|unidade|descricao
+BEHAVIOR='
+SIOP_LOCK|0|1|-|tranca o siop_level em 0444 depois de aplicar SIOP_LEVEL
+BOOT_DELAY_SEC|0|600|s|espera depois do boot_completed antes de aplicar
+WATCHDOG_SEC|0|86400|s|reaplica FULL_CAPACITY a cada N segundos (0 = desliga)
+'
+
+behavior_field() {  # behavior_field <chave> <min|max|unit|desc>
+	echo "$BEHAVIOR" | while IFS='|' read -r k lo hi u d; do
+		[ "$k" = "$1" ] || continue
+		case "$2" in
+			min) echo "$lo" ;; max) echo "$hi" ;;
+			unit) echo "$u" ;; desc) echo "$d" ;;
+		esac
+	done
+}
 
 param_field() {  # param_field <chave> <n-do-campo>
 	echo "$PARAMS" | while IFS='|' read -r k a lo hi u d; do
@@ -99,8 +132,16 @@ wr() {
 	WR_CONFIRMED=0
 	[ -e "$PSY/$1" ] || { echo "battctl: $1 nao existe neste kernel" >&2; return 1; }
 
+	# Com SIOP_LOCK o siop_level fica em 0444 e nem o root escreve (testado).
+	# Destranca so durante a escrita; siop_lock_apply() retranca depois.
+	relock=0
+	if [ "$1" = siop_level ] && ! attr_writable "$1"; then
+		chmod 0664 "$PSY/$1" 2>/dev/null && relock=1
+	fi
+
 	echo "$2" > "$PSY/$1" 2>/dev/null
 	rc=$?
+	[ "$relock" = 1 ] && chmod a=r "$PSY/$1" 2>/dev/null
 
 	if [ "$(rd "$1")" = "$2" ]; then
 		WR_CONFIRMED=1
@@ -114,6 +155,25 @@ wr() {
 }
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
+
+# "-w" nao serve: para o root ele diz sim mesmo em arquivo 0444. Vale o modo.
+attr_writable() {
+	case "$(stat -c %a "$PSY/$1" 2>/dev/null)" in
+		[2367]*) return 0 ;;
+		*) return 1 ;;
+	esac
+}
+
+# Tranca (ou destranca) o siop_level conforme SIOP_LOCK. Trancado, o framework
+# nao consegue baixar o nivel para throttlar a carga -- era o que o antigo
+# /data/adb/service.d/siop.sh fazia, agora absorvido aqui.
+siop_lock_apply() {
+	[ -e "$PSY/siop_level" ] || return 0
+	case "$(conf_get SIOP_LOCK)" in
+		1) chmod a=r "$PSY/siop_level" 2>/dev/null ;;
+		0) chmod 0664 "$PSY/siop_level" 2>/dev/null ;;
+	esac
+}
 
 # --- configuracao ------------------------------------------------------------
 
@@ -169,6 +229,9 @@ conf_set() {  # conf_set <chave> <valor>
 
 validate() {  # validate <chave> <valor>
 	lo=$(param_field "$1" min); hi=$(param_field "$1" max)
+	if [ -z "$lo" ]; then
+		lo=$(behavior_field "$1" min); hi=$(behavior_field "$1" max)
+	fi
 	[ -n "$lo" ] || die "chave desconhecida: $1 (use 'battctl show' para a lista)"
 	case "$2" in
 		''|*[!0-9-]*) die "valor invalido para $1: '$2' (esperado um inteiro)" ;;
@@ -189,6 +252,10 @@ apply_key() {  # apply_key <chave> <valor> -- silencioso no modo boot
 		return 1
 	fi
 	if wr "$attr" "$2"; then
+		# Mudar os ciclos so nao basta: quem recalcula o degrau (e com ele a
+		# float voltage) e o sec_bat_aging_check(), disparado por este attr.
+		[ "$1" = BATTERY_CYCLE ] && [ -e "$PSY/battery_cycle_test" ] && \
+			echo 1 > "$PSY/battery_cycle_test" 2>/dev/null
 		[ "$BOOT" = 1 ] && log "SET $1=$2"
 		return 0
 	fi
@@ -213,6 +280,7 @@ cmd_apply() {
 			n=$((n + 1))
 		fi
 	done
+	siop_lock_apply
 	[ "$BOOT" = 1 ] || echo "battctl: $n parametro(s) aplicado(s)"
 }
 
@@ -253,7 +321,9 @@ cmd_status() {
 		if [ "$lo" = 0 ] && [ "$hi" = 1 ]; then rng="0|1"; else rng="$lo..$hi"; fi
 
 		flag=""
-		if [ "$k" = FLOAT_VOLTAGE ]; then
+		if [ "$k" = SIOP_LEVEL ] && ! attr_writable "$a"; then
+			flag=" L"
+		elif [ "$k" = FLOAT_VOLTAGE ]; then
 			# O show le battery->pdata->chg_float_voltage, que o store nao
 			# atualiza (ele repassa o valor ao charger via VOLTAGE_MAX): aqui
 			# sai o numero do device tree mesmo com override em vigor. Quem
@@ -272,7 +342,15 @@ cmd_status() {
 	echo
 	echo "  ATIVO = no kernel agora;  CONFIG = no arquivo ('-' = nao configurado)"
 	echo "  * leitura nao reflete override (veja o dmesg)   ! CONFIG != ATIVO"
+	echo "  L = atributo trancado em 0444 (SIOP_LOCK)"
 	echo "  slate: 0=normal  1=carga cortada  2=smart"
+	echo
+	echo "Modulo"
+	echo "$BEHAVIOR" | while IFS='|' read -r k lo hi u d; do
+		[ -n "$k" ] || continue
+		cfg=$(conf_get "$k"); [ -n "$cfg" ] || cfg="-"
+		printf '  %-21s %6s %7s  %-11s %-4s\n' "$k" "" "$cfg" "$lo..$hi" "$u"
+	done | sed 's/[[:space:]]*$//'
 	echo "  arquivo: $CONF"
 }
 
@@ -280,6 +358,13 @@ cmd_show() {
 	echo "Chaves conhecidas:"
 	# Descricao em linha propria: junto com o nome ela passaria de 85 colunas.
 	echo "$PARAMS" | while IFS='|' read -r k a lo hi u d; do
+		[ -n "$k" ] || continue
+		printf '  %-21s %-11s %s\n' "$k" "$lo..$hi" "$u"
+		printf '      %s\n' "$d"
+	done
+	echo
+	echo "Chaves do modulo (nao vao para o sysfs):"
+	echo "$BEHAVIOR" | while IFS='|' read -r k lo hi u d; do
 		[ -n "$k" ] || continue
 		printf '  %-21s %-11s %s\n' "$k" "$lo..$hi" "$u"
 		printf '      %s\n' "$d"
@@ -319,17 +404,28 @@ case "${1:-status}" in
 	set)
 		[ $# -eq 3 ] || die "uso: battctl set <chave> <valor>"
 		validate "$2" "$3"
-		apply_key "$2" "$3" || die "nao apliquei $2"
-		conf_set "$2" "$3"
-		echo "battctl: $2 = $3 $(param_field "$2" unit) (aplicado e gravado)"
-		[ "${WR_CONFIRMED:-0}" = 1 ] || \
-			echo "  o driver nao ecoa este atributo: o status nao confirma, veja o dmesg"
+		if [ -n "$(behavior_field "$2" min)" ]; then
+			# Configura o modulo, nao o driver: so grava.
+			conf_set "$2" "$3"
+			siop_lock_apply
+			echo "battctl: $2 = $3 (gravado; vale a partir de agora)"
+		else
+			apply_key "$2" "$3" || die "nao apliquei $2"
+			conf_set "$2" "$3"
+			[ "$2" = SIOP_LEVEL ] && siop_lock_apply
+			echo "battctl: $2 = $3 $(param_field "$2" unit) (aplicado e gravado)"
+			[ "${WR_CONFIRMED:-0}" = 1 ] || \
+				echo "  o driver nao ecoa este atributo: o status nao confirma, veja o dmesg"
+		fi
 		;;
 
 	get)
 		[ $# -eq 2 ] || die "uso: battctl get <chave>"
 		attr=$(param_field "$2" attr)
-		[ -n "$attr" ] || die "chave desconhecida: $2"
+		if [ -z "$attr" ]; then
+			[ -n "$(behavior_field "$2" min)" ] || die "chave desconhecida: $2"
+			conf_get "$2"; exit 0
+		fi
 		rd "$attr" || die "$attr nao existe neste kernel"
 		;;
 
