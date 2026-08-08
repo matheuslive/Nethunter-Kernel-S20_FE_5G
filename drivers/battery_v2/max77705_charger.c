@@ -903,9 +903,16 @@ static int max77705_set_otg(struct max77705_charger_data *charger, int enable)
 	value.intval = enable;
 	charger->otg_on = enable;
 
-	/* otg current limit 900mA */
+	/* otg current limit 1500mA (stock: 900mA)
+	 *
+	 * Dongle WiFi transmitindo puxa bem mais que os 900mA do stock -- um
+	 * rtl8812au em TX, ou um hub com dois dongles, estoura o limite e o
+	 * max77705 dispara NOTIFY_EVENT_OVERCURRENT, que derruba o OTG no meio
+	 * da captura. O proprio driver ja usa o degrau de 1500mA no caminho de
+	 * VOLTAGE_MAX, entao e valor suportado pelo IC.
+	 */
 	max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_02,
-			MAX77705_OTG_ILIM_900 << CHG_CNFG_02_OTG_ILIM_SHIFT,
+			MAX77705_OTG_ILIM_1500 << CHG_CNFG_02_OTG_ILIM_SHIFT,
 			CHG_CNFG_02_OTG_ILIM_MASK);
 
 	if (enable) {
@@ -1026,9 +1033,9 @@ static void max77705_charger_initialize(struct max77705_charger_data *charger)
 	max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_00,
 			0, CHG_CNFG_00_OTG_CTRL);
 
-	/* otg current limit 900mA */
+	/* otg current limit 1500mA (stock: 900mA) -- ver max77705_set_otg() */
 	max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_02,
-			MAX77705_OTG_ILIM_900 << CHG_CNFG_02_OTG_ILIM_SHIFT,
+			MAX77705_OTG_ILIM_1500 << CHG_CNFG_02_OTG_ILIM_SHIFT,
 			CHG_CNFG_02_OTG_ILIM_MASK);
 
 	/* UNO ILIM 1.0A */
@@ -2028,9 +2035,11 @@ static int max77705_otg_set_property(struct power_supply *psy,
 					MAX77705_OTG_ILIM_1500 << CHG_CNFG_02_OTG_ILIM_SHIFT,
 					CHG_CNFG_02_OTG_ILIM_MASK);
 		} else {
-			/* otg current limit 900mA */
+			/* volta ao default do driver, que aqui tambem e 1500mA
+			 * (stock: 900mA) -- ver max77705_set_otg().
+			 */
 			max77705_update_reg(charger->i2c, MAX77705_CHG_REG_CNFG_02,
-					MAX77705_OTG_ILIM_900 << CHG_CNFG_02_OTG_ILIM_SHIFT,
+					MAX77705_OTG_ILIM_1500 << CHG_CNFG_02_OTG_ILIM_SHIFT,
 					CHG_CNFG_02_OTG_ILIM_MASK);
 		}
 		break;

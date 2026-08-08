@@ -1,0 +1,6 @@
+id=nethunter_battery_r8q
+name=NetHunter Battery (r8q)
+version=@VERSION@
+versionCode=@VERSIONCODE@
+author=matheuslive
+description=Tuning de carga do Galaxy S20 FE 5G: limite de carga, float voltage, correntes e limites termicos via sysfs do sec_battery. CLI battctl + aplicacao no boot. O limite de carga funciona em kernel stock; o resto exige o kernel Nethunter r8q v4.3+.

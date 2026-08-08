@@ -20,19 +20,20 @@ DEFCONFIG_NAME=wirus_defconfig
 CHIPSET_NAME=kona
 VARIANT=r8q
 ARCH=arm64
-VERSION=NetHunter_matheuslive_${VARIANT}_v4.2
+VERSION=NetHunter_matheuslive_${VARIANT}_v4.3
 JOBS=$(nproc)
 
 OUT=$DIR/out
 DIST=$DIR/build/$VARIANT
 AK3=$OUT/AnyKernel3
 MAG=$OUT/magisk
+BAT=$OUT/magisk-battery
 STAGE=$OUT/moddep
 DTS_DIR=$OUT/arch/$ARCH/boot/dts
 
-# Versao do modulo Magisk companion (versionCode tem que ser inteiro).
-MOD_VERSION=v4.2
-MOD_VERSIONCODE=42
+# Versao dos modulos Magisk (versionCode tem que ser inteiro).
+MOD_VERSION=v4.3
+MOD_VERSIONCODE=43
 
 # Toolchain versionado no proprio repo. O GCC 4.9 entra so como binutils
 # (as, ld, ar...) via CROSS_COMPILE; quem compila e o clang do REAL_CC.
@@ -102,7 +103,7 @@ mapfile -t DTBO_FILES < <(find "$DTS_DIR/samsung/" -name "${CHIPSET_NAME}-sec-${
 # Coleta os modulos ANTES de mexer em $OUT/AnyKernel3|magisk|moddep (os tres
 # moram dentro do $OUT; um find posterior acharia as copias que acabamos de por
 # la -- e num build incremental elas sobrevivem da rodada anterior).
-mapfile -t MODULES < <(find "$OUT" \( -path "$AK3" -o -path "$MAG" -o -path "$STAGE" \) -prune -o -name '*.ko' -print)
+mapfile -t MODULES < <(find "$OUT" \( -path "$AK3" -o -path "$MAG" -o -path "$BAT" -o -path "$STAGE" \) -prune -o -name '*.ko' -print)
 rm -f "$DIST/modules"/*.ko
 if [ ${#MODULES[@]} -gt 0 ]; then
 	cp -f "${MODULES[@]}" "$DIST/modules/"
@@ -211,8 +212,21 @@ sed -e 's#copy /\([a-z]*-descriptor.bin\)#copy /system/etc/nethunter/\1#' \
 rm -f "$DIST/nethunter-companion-$VARIANT.zip"
 (cd "$MAG" && zip -qr9 "$DIST/nethunter-companion-$VARIANT.zip" ./*)
 
+# --- 3. Modulo Magisk de bateria (battctl + tuning no boot) ------------------
+#
+# Independente do companion: nao tem .ko dentro, entao nao depende do vermagic
+# e o limite de carga funciona ate em kernel stock. Os batt_tune_* e que exigem
+# CONFIG_ENG_BATTERY_CONCEPT=y (v4.3+).
+rm -rf "$BAT"
+cp -a "$DIR/packaging/magisk-battery" "$BAT"
+sed -i -e "s/@VERSION@/$MOD_VERSION/" -e "s/@VERSIONCODE@/$MOD_VERSIONCODE/" "$BAT/module.prop"
+
+rm -f "$DIST/nethunter-battery-$VARIANT.zip"
+(cd "$BAT" && zip -qr9 "$DIST/nethunter-battery-$VARIANT.zip" ./*)
+
 echo
 echo ">> $(cat "$OUT/include/config/kernel.release")"
 echo ">> kernel   : $DIST/$VERSION.zip ($(du -h "$DIST/$VERSION.zip" | cut -f1))"
 echo ">> companion: $DIST/nethunter-companion-$VARIANT.zip ($(du -h "$DIST/nethunter-companion-$VARIANT.zip" | cut -f1))"
+echo ">> bateria  : $DIST/nethunter-battery-$VARIANT.zip ($(du -h "$DIST/nethunter-battery-$VARIANT.zip" | cut -f1))"
 echo ">> modulos  : $(ls "$DIST/modules" | tr '\n' ' ')"

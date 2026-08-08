@@ -1,0 +1,61 @@
+# nethunter-battery.conf -- parametros de carga aplicados no boot pelo
+# modulo Magisk "NetHunter Battery (r8q)".
+#
+# Formato: CHAVE=valor, uma por linha. Linha comentada = parametro nao tocado
+# (o kernel fica com o valor do device tree). Depois de editar:
+#
+#     battctl apply      aplica agora, sem reboot
+#     battctl status     mostra o que esta valendo
+#     battctl show       lista as chaves com faixa e descricao
+#
+# Valores fora da faixa aceita pelo driver sao recusados pelo battctl (o
+# kernel simplesmente os ignoraria em silencio).
+
+# --- limite de carga (funciona ate no kernel stock) --------------------------
+# Para de carregar nesta porcentagem e so recarrega 2% abaixo. 0 desliga.
+# Equivale ao "Proteger bateria" da One UI, mas com o valor que voce quiser.
+#FULL_CAPACITY=80
+
+# --- exigem o kernel Nethunter r8q v4.3+ (CONFIG_ENG_BATTERY_CONCEPT) --------
+
+# Tensao de fim de carga, em mV (4001..4400). O stock trabalha em 4400.
+# 4200 tira ~10% de capacidade util e reduz bastante o estresse da celula.
+# Combina com FULL_CAPACITY: um limita por SoC, o outro por tensao.
+#FLOAT_VOLTAGE=4200
+
+# Corrente de ENTRADA e corrente de CARGA, em mA (0..4000). Valem para todos
+# os tipos de cabo menos USB. ATENCAO: mexer nelas liga as flags de teste do
+# driver, que DESATIVAM o step charging -- a carga passa a ser corrente
+# constante ate a float voltage, sem os degraus da Samsung.
+#INPUT_CURRENT=1500
+#FAST_CURRENT=1500
+
+# Corrente de corte do "cheio" (1..999 mA).
+#TERM_CURRENT_1ST=200
+#TERM_CURRENT_2ND=150
+
+# Throttle termico do charger, em decimos de grau (500 = 50.0 C).
+#CHG_TEMP_HIGH=500
+#CHG_TEMP_REC=470
+#CHG_LIMIT_CURRENT=1000
+
+# Bloqueio de carga por temperatura da bateria, em decimos de grau.
+#TEMP_HIGH_NORMAL=500
+#TEMP_HIGH_REC_NORMAL=460
+#TEMP_LOW_NORMAL=0
+#TEMP_LOW_REC_NORMAL=50
+
+# Modo loja: mantem a carga oscilando entre 70 e 80%. SO LIGA -- o driver nao
+# implementa o desligamento; para sair, comente esta linha e reinicie.
+#STORE_MODE=1
+
+# --- comportamento do modulo -------------------------------------------------
+
+# Segundos de espera depois do sys.boot_completed antes de aplicar. O framework
+# escreve em batt_full_capacity ao restaurar o estado do "Proteger bateria";
+# quem escreve por ultimo vence.
+BOOT_DELAY_SEC=20
+
+# Se > 0, reaplica FULL_CAPACITY a cada N segundos caso algo o altere (o app
+# da One UI faz isso ao ser mexido). 0 desliga o watchdog.
+WATCHDOG_SEC=0

@@ -1,0 +1,266 @@
+#!/system/bin/sh
+# battctl -- le e escreve os parametros de carga do sec_battery (r8q).
+#
+# Os numeros de carga do S20 FE moram no device tree, e o DTB nao chega ao
+# device pelo AnyKernel (boot v2 usa a secao dtb stock). O que resta e o sysfs
+# do driver: /sys/class/power_supply/battery/. Parte dele existe no kernel
+# stock (batt_full_capacity, batt_slate_mode, store_mode); os batt_tune_* so
+# aparecem com CONFIG_ENG_BATTERY_CONCEPT=y, que o kernel Nethunter r8q v4.3+
+# habilita.
+#
+# Uso:
+#   battctl status              estado da bateria + parametros ativos
+#   battctl show                conteudo do arquivo de configuracao
+#   battctl apply               reaplica tudo que esta no arquivo
+#   battctl set <chave> <val>   grava no arquivo e aplica agora
+#   battctl get <chave>         le o valor atual no kernel
+#   battctl limit <pct|off>     atalho para FULL_CAPACITY (para de carregar em pct)
+#   battctl charge on|off       slate mode: corta a carga mantendo o link USB
+#   battctl raw <attr> [val]    le/escreve um atributo qualquer do sysfs
+#   battctl reset               desfaz o que e reversivel sem reboot
+#   battctl watchdog            reaplica FULL_CAPACITY em loop (uso do service.sh)
+
+PSY=/sys/class/power_supply/battery
+CONF=/data/adb/nethunter-battery.conf
+LOG=/data/adb/nethunter-battery.log
+
+die() { echo "battctl: $*" >&2; exit 1; }
+
+[ -d "$PSY" ] || die "$PSY nao existe -- este device nao usa o sec_battery?"
+
+# --- tabela de parametros ----------------------------------------------------
+#
+# chave|atributo sysfs|min|max|unidade|descricao
+#
+# Os limites sao os que o proprio driver valida em sec_battery_sysfs.c: escrever
+# fora da faixa e ignorado em silencio pelo kernel, entao barramos aqui para o
+# erro aparecer. Temperatura e em decimos de grau (500 = 50.0 C).
+PARAMS='
+FULL_CAPACITY|batt_full_capacity|0|100|%|para de carregar nesta carga (0 = desliga; recarrega em -2%)
+FLOAT_VOLTAGE|batt_tune_float_voltage|4001|4400|mV|tensao de fim de carga (4400 = stock, 4100 poupa a celula)
+INPUT_CURRENT|batt_tune_input_charge_current|0|4000|mA|limite de corrente de ENTRADA (todos os cabos menos USB)
+FAST_CURRENT|batt_tune_fast_charge_current|0|4000|mA|corrente de carga da bateria (idem)
+TERM_CURRENT_1ST|batt_tune_ui_term_cur_1st|1|999|mA|corrente de corte do 1o "cheio"
+TERM_CURRENT_2ND|batt_tune_ui_term_cur_2nd|1|999|mA|corrente de corte do 2o "cheio"
+CHG_TEMP_HIGH|batt_tune_chg_temp_high|-200|999|0.1C|temperatura do charger que dispara o throttle
+CHG_TEMP_REC|batt_tune_chg_temp_rec|-200|999|0.1C|temperatura de recuperacao do throttle
+CHG_LIMIT_CURRENT|batt_tune_chg_limit_cur|1|2999|mA|corrente de entrada durante o throttle termico
+TEMP_HIGH_NORMAL|batt_tune_temp_high_normal|-200|999|0.1C|temperatura da bateria que bloqueia a carga
+TEMP_HIGH_REC_NORMAL|batt_tune_temp_high_rec_normal|-200|999|0.1C|temperatura que libera a carga de volta
+TEMP_LOW_NORMAL|batt_tune_temp_low_normal|-200|999|0.1C|temperatura baixa que bloqueia a carga
+TEMP_LOW_REC_NORMAL|batt_tune_temp_low_rec_normal|-200|999|0.1C|temperatura baixa que libera a carga
+STORE_MODE|store_mode|0|1|-|modo loja: mantem a carga entre 70 e 80% (SO LIGA; desligar exige reboot)
+'
+
+param_field() {  # param_field <chave> <n-do-campo>
+	echo "$PARAMS" | while IFS='|' read -r k a lo hi u d; do
+		[ "$k" = "$1" ] || continue
+		case "$2" in
+			attr) echo "$a" ;; min) echo "$lo" ;; max) echo "$hi" ;;
+			unit) echo "$u" ;; desc) echo "$d" ;;
+		esac
+	done
+}
+
+keys() { echo "$PARAMS" | while IFS='|' read -r k _; do [ -n "$k" ] && echo "$k"; done; }
+
+# --- helpers de sysfs --------------------------------------------------------
+
+has_eng() { [ -e "$PSY/batt_tune_float_voltage" ]; }
+
+rd() { [ -r "$PSY/$1" ] && cat "$PSY/$1" 2>/dev/null; }
+
+wr() {  # wr <attr> <valor>
+	[ -e "$PSY/$1" ] || { echo "battctl: $1 nao existe neste kernel" >&2; return 1; }
+	if ! echo "$2" > "$PSY/$1" 2>/dev/null; then
+		echo "battctl: falhou escrever $2 em $1 (root?)" >&2
+		return 1
+	fi
+	return 0
+}
+
+log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
+
+# --- configuracao ------------------------------------------------------------
+
+conf_get() {  # conf_get <chave> -- valor no arquivo, vazio se ausente/comentado
+	[ -f "$CONF" ] || return 0
+	sed -n "s/^[[:space:]]*$1[[:space:]]*=[[:space:]]*\([^#[:space:]]*\).*/\1/p" "$CONF" | tail -1
+}
+
+conf_set() {  # conf_set <chave> <valor>
+	[ -f "$CONF" ] || : > "$CONF"
+	if grep -q "^[[:space:]]*#\?[[:space:]]*$1[[:space:]]*=" "$CONF"; then
+		sed -i "s|^[[:space:]]*#\?[[:space:]]*$1[[:space:]]*=.*|$1=$2|" "$CONF"
+	else
+		echo "$1=$2" >> "$CONF"
+	fi
+}
+
+validate() {  # validate <chave> <valor>
+	lo=$(param_field "$1" min); hi=$(param_field "$1" max)
+	[ -n "$lo" ] || die "chave desconhecida: $1 (use 'battctl show' para a lista)"
+	case "$2" in
+		''|*[!0-9-]*) die "valor invalido para $1: '$2' (esperado um inteiro)" ;;
+	esac
+	[ "$2" -ge "$lo" ] && [ "$2" -le "$hi" ] || \
+		die "$1 fora da faixa aceita pelo driver: $lo..$hi"
+}
+
+apply_key() {  # apply_key <chave> <valor> -- silencioso no modo boot
+	attr=$(param_field "$1" attr)
+	[ -n "$attr" ] || return 1
+	if [ ! -e "$PSY/$attr" ]; then
+		[ "$BOOT" = 1 ] || echo "battctl: $1 ignorado ($attr nao existe -- kernel sem ENG_BATTERY_CONCEPT?)" >&2
+		[ "$BOOT" = 1 ] && log "SKIP $1=$2 ($attr ausente)"
+		return 1
+	fi
+	if wr "$attr" "$2"; then
+		[ "$BOOT" = 1 ] && log "SET $1=$2"
+		return 0
+	fi
+	[ "$BOOT" = 1 ] && log "FAIL $1=$2"
+	return 1
+}
+
+cmd_apply() {
+	[ -f "$CONF" ] || die "$CONF nao existe"
+	n=0
+	for k in $(keys); do
+		v=$(conf_get "$k")
+		[ -n "$v" ] || continue
+		# STORE_MODE=0 nao faz nada no driver (o handler so trata x!=0);
+		# nao vale nem tentar, para nao poluir o log.
+		[ "$k" = STORE_MODE ] && [ "$v" = 0 ] && continue
+		if apply_key "$k" "$v"; then
+			[ "$BOOT" = 1 ] || echo "  $k = $v $(param_field "$k" unit)"
+			n=$((n + 1))
+		fi
+	done
+	[ "$BOOT" = 1 ] || echo "battctl: $n parametro(s) aplicado(s)"
+}
+
+# --- comandos ----------------------------------------------------------------
+
+cmd_status() {
+	cap=$(rd capacity); vol=$(rd voltage_now); cur=$(rd current_now)
+	tmp=$(rd temp);     sts=$(rd status);      hlt=$(rd health)
+	echo "Bateria"
+	echo "  carga        : ${cap:-?} %"
+	echo "  tensao       : $(awk "BEGIN{printf \"%.3f\", ${vol:-0}/1000000}") V"
+	echo "  corrente     : ${cur:-?} uA  (negativo = descarregando)"
+	echo "  temperatura  : $(awk "BEGIN{printf \"%.1f\", ${tmp:-0}/10}") C"
+	echo "  status       : ${sts:-?} / ${hlt:-?}"
+	echo "  cabo         : $(rd batt_type 2>/dev/null || echo '?') online=$(rd online)"
+	echo
+	echo "Parametros (kernel)"
+	if has_eng; then
+		echo "  [ENG_BATTERY_CONCEPT presente -- batt_tune_* disponiveis]"
+	else
+		echo "  [sem ENG_BATTERY_CONCEPT -- so batt_full_capacity/slate/store]"
+	fi
+	for k in $(keys); do
+		attr=$(param_field "$k" attr)
+		[ -e "$PSY/$attr" ] || continue
+		printf '  %-22s %s %s\n' "$k" "$(rd "$attr")" "$(param_field "$k" unit)"
+	done
+	slate=$(rd batt_slate_mode)
+	echo "  slate_mode           : ${slate:-?} (0=carga normal, 1=carga cortada)"
+	echo
+	echo "Config em $CONF"
+}
+
+cmd_show() {
+	echo "Chaves conhecidas:"
+	echo "$PARAMS" | while IFS='|' read -r k a lo hi u d; do
+		[ -n "$k" ] || continue
+		printf '  %-22s %s..%s %-5s %s\n' "$k" "$lo" "$hi" "$u" "$d"
+	done
+	echo
+	if [ -f "$CONF" ]; then
+		echo "--- $CONF ---"
+		cat "$CONF"
+	else
+		echo "($CONF ainda nao existe)"
+	fi
+}
+
+cmd_watchdog() {
+	iv=$(conf_get WATCHDOG_SEC)
+	case "$iv" in ''|0|*[!0-9]*) exit 0 ;; esac
+	want=$(conf_get FULL_CAPACITY)
+	[ -n "$want" ] && [ "$want" != 0 ] || exit 0
+	log "watchdog ligado (FULL_CAPACITY=$want, a cada ${iv}s)"
+	while :; do
+		sleep "$iv"
+		now=$(rd batt_full_capacity)
+		[ "$now" = "$want" ] && continue
+		# O app "Proteger bateria" da One UI escreve neste mesmo atributo; se
+		# ele (ou qualquer outro) mudar o valor, devolvemos o nosso.
+		wr batt_full_capacity "$want" && log "watchdog: $now -> $want"
+	done
+}
+
+case "${1:-status}" in
+	status)  cmd_status ;;
+	show)    cmd_show ;;
+	apply)   [ "${2:-}" = "--boot" ] && BOOT=1; cmd_apply ;;
+	watchdog) cmd_watchdog ;;
+
+	set)
+		[ $# -eq 3 ] || die "uso: battctl set <chave> <valor>"
+		validate "$2" "$3"
+		apply_key "$2" "$3" || die "nao apliquei $2"
+		conf_set "$2" "$3"
+		echo "battctl: $2 = $3 $(param_field "$2" unit) (aplicado e gravado)"
+		;;
+
+	get)
+		[ $# -eq 2 ] || die "uso: battctl get <chave>"
+		attr=$(param_field "$2" attr)
+		[ -n "$attr" ] || die "chave desconhecida: $2"
+		rd "$attr" || die "$attr nao existe neste kernel"
+		;;
+
+	limit)
+		[ $# -eq 2 ] || die "uso: battctl limit <pct|off>"
+		v=$2; [ "$v" = off ] && v=0
+		validate FULL_CAPACITY "$v"
+		[ "$v" != 0 ] && [ "$v" -lt 50 ] && die "limite abaixo de 50% nao faz sentido para uso diario"
+		apply_key FULL_CAPACITY "$v" && conf_set FULL_CAPACITY "$v"
+		if [ "$v" = 0 ]; then
+			echo "battctl: limite de carga desligado"
+		else
+			echo "battctl: para de carregar em $v%, recarrega em $((v - 2))%"
+		fi
+		;;
+
+	charge)
+		case "${2:-}" in
+			off) wr batt_slate_mode 1 && echo "battctl: carga cortada (slate mode) -- USB segue conectado" ;;
+			on)  wr batt_slate_mode 0 && echo "battctl: carga liberada" ;;
+			*)   die "uso: battctl charge on|off" ;;
+		esac
+		;;
+
+	raw)
+		[ $# -ge 2 ] || die "uso: battctl raw <attr> [valor]"
+		if [ $# -eq 2 ]; then
+			rd "$2" || die "$2 nao existe ou nao e legivel"
+		else
+			wr "$2" "$3" && echo "battctl: $2 <- $3"
+		fi
+		;;
+
+	reset)
+		wr batt_full_capacity 0 && conf_set FULL_CAPACITY 0
+		wr batt_slate_mode 0
+		echo "battctl: limite de carga e slate mode desligados."
+		echo "battctl: float voltage, correntes e temperaturas so voltam ao"
+		echo "         padrao do device tree depois de um reboot -- comente as"
+		echo "         chaves em $CONF antes, senao o service.sh reaplica."
+		;;
+
+	-h|--help|help) sed -n '2,26p' "$0" | sed 's/^# \{0,1\}//' ;;
+	*) die "comando desconhecido: $1 (battctl -h)" ;;
+esac
