@@ -10,9 +10,16 @@ additions" do `anykernel.sh` original tentavam fazer escrevendo em `/system` e
 | O quê | Onde no device | Como |
 |---|---|---|
 | Módulos `.ko` do kernel | `/system/lib/modules/` | magic mount |
-| `hid-keyboard` | `/system/xbin/hid-keyboard` | magic mount |
+| `hid-keyboard`, `usbwifi` | `/system/bin/` | magic mount |
 | Descriptors HID (`*.bin`) | `/system/etc/nethunter/` | magic mount |
+| Firmware dos dongles | `/vendor/firmware/` | magic mount (`$MODPATH/vendor/`) |
 | `init.nethunter.rc` | importado no boot | `overlay.d/sbin/` |
+
+⚠️ **Binário vai em `system/bin`, nunca em `system/xbin`** — o Magisk 30700
+não monta `xbin` (o diretório nem existe em One UI 13), e o arquivo some em
+silêncio. **Firmware vai na raiz do módulo (`$MODPATH/vendor/`)**, não em
+`$MODPATH/system/vendor/`: aqui `/system/vendor` é symlink para `/vendor` e o
+magic mount não o atravessa. Os dois casos morderam este módulo até 2026-08-08.
 
 ## O que é sólido e o que é experimental
 

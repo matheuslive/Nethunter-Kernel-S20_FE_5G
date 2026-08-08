@@ -45,7 +45,7 @@ rm -f "$MODPATH/nethunter-battery.conf.example" "$MODPATH/README.md"
 
 ui_print "- Ajustando permissoes"
 set_perm_recursive "$MODPATH" 0 0 0755 0644
-set_perm "$MODPATH/system/xbin/battctl" 0 0 0755
+set_perm "$MODPATH/system/bin/battctl" 0 0 0755
 
 ui_print " "
 ui_print "  battctl status              estado e parametros ativos"

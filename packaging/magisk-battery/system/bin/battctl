@@ -148,10 +148,13 @@ cmd_status() {
 	echo "Bateria"
 	echo "  carga        : ${cap:-?} %"
 	echo "  tensao       : $(awk "BEGIN{printf \"%.3f\", ${vol:-0}/1000000}") V"
-	echo "  corrente     : ${cur:-?} uA  (negativo = descarregando)"
+	# O sec_battery reporta corrente em mA (SEC_BATTERY_CURRENT_MA), nao em uA
+	# como manda o padrao do power_supply; a tensao segue em uV.
+	echo "  corrente     : ${cur:-?} mA  (negativo = descarregando)"
 	echo "  temperatura  : $(awk "BEGIN{printf \"%.1f\", ${tmp:-0}/10}") C"
 	echo "  status       : ${sts:-?} / ${hlt:-?}"
-	echo "  cabo         : $(rd batt_type 2>/dev/null || echo '?') online=$(rd online)"
+	echo "  modelo       : $(rd batt_type 2>/dev/null || echo '?')"
+	echo "  online       : $(rd online) (0 = sem cabo)"
 	echo
 	echo "Parametros (kernel)"
 	if has_eng; then

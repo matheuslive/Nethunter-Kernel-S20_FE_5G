@@ -137,7 +137,7 @@ sed -i -e "s/@VERSION@/$MOD_VERSION/" -e "s/@VERSIONCODE@/$MOD_VERSIONCODE/" "$M
 #
 # Os drivers de dongle WiFi sao =m (built-in eles custavam ~7 MB de kernel
 # residente mesmo sem dongle nenhum plugado). Quem carrega e o helper
-# system/xbin/usbwifi, que chama "modprobe -d /system/lib/modules": o modprobe
+# system/bin/usbwifi, que chama "modprobe -d /system/lib/modules": o modprobe
 # do toolbox do Android le modules.dep/modules.alias do diretorio passado no -d.
 #
 # O depmod exige a arvore <base>/lib/modules/<release>/, entao montamos uma
@@ -172,9 +172,14 @@ fi
 # dos drivers de dongle usa request_firmware_direct(), que puraria esse
 # caminho, entao /vendor/firmware serve. NAO mexer em firmware_class.path: ele
 # aponta para /vendor/firmware_mnt/image e outros subsistemas dependem disso.
-mkdir -p "$MAG/system/vendor/firmware"
-cp -a "$DIR/packaging/firmware/." "$MAG/system/vendor/firmware/"
-rm -f "$MAG/system/vendor/firmware/README.md"   # doc do repo, nao vai pro device
+#
+# Vai em $MODPATH/vendor/, nao em $MODPATH/system/vendor/: neste device
+# /system/vendor e um SYMLINK para /vendor, e o magic mount nao o atravessa --
+# medido no device em 2026-08-08, nenhum dos 8 firmwares tinha chegado em
+# /vendor/firmware/. Modulo com /vendor separado usa a raiz do modulo.
+mkdir -p "$MAG/vendor/firmware"
+cp -a "$DIR/packaging/firmware/." "$MAG/vendor/firmware/"
+rm -f "$MAG/vendor/firmware/README.md"   # doc do repo, nao vai pro device
 
 # Avisa se algum modulo declara firmware que nao esta empacotado -- sem isto,
 # habilitar um driver novo faria o firmware sumir em silencio. Os ausentes ja
@@ -193,15 +198,15 @@ if command -v /sbin/modinfo >/dev/null 2>&1; then
 	for ko in "${MODULES[@]}"; do
 		/sbin/modinfo -F firmware "$ko" 2>/dev/null
 	done | sort -u | while read -r fw; do
-		[ -f "$MAG/system/vendor/firmware/$fw" ] && continue
+		[ -f "$MAG/vendor/firmware/$fw" ] && continue
 		case " ${FW_KNOWN_MISSING[*]} " in *" $fw "*) continue ;; esac
 		echo "!! firmware declarado e ausente: $fw" >&2
 	done
 fi
 
 # hid-keyboard e descriptors HID (fontes do template AnyKernel3)
-mkdir -p "$MAG/system/xbin" "$MAG/system/etc/nethunter"
-cp -f "$DIR/AnyKernel3/system/xbin/hid-keyboard" "$MAG/system/xbin/"
+mkdir -p "$MAG/system/bin" "$MAG/system/etc/nethunter"
+cp -f "$DIR/AnyKernel3/system/xbin/hid-keyboard" "$MAG/system/bin/"
 cp -f "$DIR/AnyKernel3/ramdisk-patch"/*-descriptor.bin "$MAG/system/etc/nethunter/"
 
 # init.nethunter.rc: importado no boot via overlay.d. Reaponta os descriptors

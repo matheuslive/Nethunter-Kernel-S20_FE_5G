@@ -8,7 +8,7 @@
 
 CONF=/data/adb/nethunter-battery.conf
 LOG=/data/adb/nethunter-battery.log
-BATTCTL=/system/xbin/battctl
+BATTCTL=/system/bin/battctl
 
 log() { echo "$(date '+%Y-%m-%d %H:%M:%S') $*" >> "$LOG"; }
 

@@ -32,10 +32,10 @@ esac
 ui_print "- Ajustando permissoes"
 set_perm_recursive "$MODPATH" 0 0 0755 0644
 for bin in hid-keyboard usbwifi; do
-  [ -f "$MODPATH/system/xbin/$bin" ] && set_perm "$MODPATH/system/xbin/$bin" 0 0 0755
+  [ -f "$MODPATH/system/bin/$bin" ] && set_perm "$MODPATH/system/bin/$bin" 0 0 0755
 done
 
-FWCOUNT=$(find "$MODPATH/system/vendor/firmware" -type f 2>/dev/null | wc -l)
+FWCOUNT=$(find "$MODPATH/vendor/firmware" -type f 2>/dev/null | wc -l)
 ui_print "- Drivers de dongle WiFi vem como .ko (nao mais built-in),"
 ui_print "  com $FWCOUNT firmwares para /vendor/firmware:"
 ui_print "    usbwifi        carrega o driver do dongle plugado"

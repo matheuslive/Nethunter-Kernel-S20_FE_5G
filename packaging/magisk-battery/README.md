@@ -20,7 +20,7 @@ sysfs, e é nele que este módulo trabalha.
 
 | O quê | Onde no device |
 |---|---|
-| `battctl` (CLI) | `/system/xbin/battctl` (magic mount) |
+| `battctl` (CLI) | `/system/bin/battctl` (magic mount) — **não `xbin`**, o Magisk 30700 não o monta |
 | Aplicação no boot | `service.sh` do módulo (late_start) |
 | Configuração | `/data/adb/nethunter-battery.conf` (fora do módulo) |
 | Log | `/data/adb/nethunter-battery.log` |
