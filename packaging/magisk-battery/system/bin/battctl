@@ -119,8 +119,19 @@ conf_get() {  # conf_get <chave> -- valor no arquivo, vazio se ausente/comentado
 
 conf_set() {  # conf_set <chave> <valor>
 	[ -f "$CONF" ] || : > "$CONF"
-	if grep -q "^[[:space:]]*#\?[[:space:]]*$1[[:space:]]*=" "$CONF"; then
-		sed -i "s|^[[:space:]]*#\?[[:space:]]*$1[[:space:]]*=.*|$1=$2|" "$CONF"
+	# Duas expressoes (uma para a linha ativa, outra para a comentada) em vez
+	# de um "#\?": o toybox grep/sed do Android NAO entende o "\?" de BRE, que
+	# e extensao GNU. Com ele o casamento falhava, o else corria e cada set
+	# virava uma duplicata no fim do arquivo. So aparecia no boot e no
+	# instalador -- num shell com o Termux no PATH o grep e o GNU, que entende.
+	if grep -q -e "^[[:space:]]*$1[[:space:]]*=" \
+	           -e "^[[:space:]]*#[[:space:]]*$1[[:space:]]*=" "$CONF"; then
+		sed -i -e "s|^[[:space:]]*$1[[:space:]]*=.*|$1=$2|" \
+		       -e "s|^[[:space:]]*#[[:space:]]*$1[[:space:]]*=.*|$1=$2|" "$CONF"
+		# Duplicata herdada de versao anterior do battctl viraria N linhas
+		# iguais depois da substituicao: mantem so a primeira.
+		awk -v k="$1" '$0 ~ "^" k "=" { if (seen++) next } { print }' \
+			"$CONF" > "$CONF.tmp" && mv -f "$CONF.tmp" "$CONF"
 	else
 		echo "$1=$2" >> "$CONF"
 	fi
@@ -185,27 +196,42 @@ cmd_status() {
 	echo "  modelo       : $(rd batt_type 2>/dev/null || echo '?')"
 	echo "  online       : $(rd online) (0 = sem cabo)"
 	echo
-	echo "Parametros (kernel)"
+	echo "Parametros"
 	if has_eng; then
 		echo "  [ENG_BATTERY_CONCEPT presente -- batt_tune_* disponiveis]"
 	else
 		echo "  [sem ENG_BATTERY_CONCEPT -- so batt_full_capacity/slate/store]"
 	fi
-	for k in $(keys); do
-		attr=$(param_field "$k" attr)
-		[ -e "$PSY/$attr" ] || continue
-		# O show do float voltage le battery->pdata->chg_float_voltage, que o
-		# store nao atualiza (ele repassa o valor ao charger via VOLTAGE_MAX).
-		# Ou seja: aqui sai sempre o numero do device tree, mesmo com override
-		# em vigor. Quem confirma o valor real e o dmesg do charger.
+	printf '  %-22s %8s %8s  %-12s %s\n' PARAMETRO ATIVO CONFIG POSSIVEIS UNIDADE
+	# Uma passada so pelo PARAMS: chamar param_field por campo custaria um
+	# subshell por celula da tabela.
+	echo "$PARAMS" | while IFS='|' read -r k a lo hi u d; do
+		[ -n "$k" ] || continue
+		[ -e "$PSY/$a" ] || continue
+		val=$(rd "$a")
+		cfg=$(conf_get "$k"); [ -n "$cfg" ] || cfg="-"
+		# Faixa continua de inteiros, ou enumeracao quando sao dois valores.
+		if [ "$lo" = 0 ] && [ "$hi" = 1 ]; then rng="0|1"; else rng="$lo..$hi"; fi
+
 		note=""
-		[ "$k" = FLOAT_VOLTAGE ] && note="   <- do device tree; nao mostra override"
-		printf '  %-22s %s %s%s\n' "$k" "$(rd "$attr")" "$(param_field "$k" unit)" "$note"
+		if [ "$k" = FLOAT_VOLTAGE ]; then
+			# O show le battery->pdata->chg_float_voltage, que o store nao
+			# atualiza (ele repassa o valor ao charger via VOLTAGE_MAX): aqui
+			# sai o numero do device tree mesmo com override em vigor. Quem
+			# confirma o valor real e o dmesg do charger.
+			note="  (ATIVO vem do device tree; nao mostra override)"
+		elif [ "$cfg" != "-" ] && [ "$cfg" != "$val" ]; then
+			# Config gravada que nao bateu com o kernel: ou nao foi aplicada
+			# ainda (mexeram no arquivo na mao), ou algo sobrescreveu depois.
+			note="  <- divergente; 'battctl apply' reaplica"
+		fi
+		printf '  %-22s %8s %8s  %-12s %s%s\n' "$k" "$val" "$cfg" "$rng" "$u" "$note"
 	done
-	slate=$(rd batt_slate_mode)
-	echo "  slate_mode           : ${slate:-?} (0=carga normal, 1=carga cortada)"
+	printf '  %-22s %8s %8s  %-12s %s\n' slate_mode "$(rd batt_slate_mode)" - "0|1|2" \
+		"0=carga normal, 1=cortada, 2=smart"
 	echo
-	echo "Config em $CONF"
+	echo "  ATIVO = valor agora no kernel;  CONFIG = o que esta em $CONF"
+	echo "  ('-' = nao configurado: o kernel fica com o valor do device tree)"
 }
 
 cmd_show() {
