@@ -1,5 +1,7 @@
 # Gerados pelo build.sh (o kbuild roda out-of-tree, nada suja a arvore)
 /out/
 /build/
+# Symlinks da raiz para o zip mais recente de build/<variant>/
+/*.zip
 
 __pycache__/

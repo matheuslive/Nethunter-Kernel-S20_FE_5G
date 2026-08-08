@@ -224,6 +224,39 @@ sed -i -e "s/@VERSION@/$MOD_VERSION/" -e "s/@VERSIONCODE@/$MOD_VERSIONCODE/" "$B
 rm -f "$DIST/nethunter-battery-$VARIANT.zip"
 (cd "$BAT" && zip -qr9 "$DIST/nethunter-battery-$VARIANT.zip" ./*)
 
+ZIPS=(
+	"$DIST/$VERSION.zip"
+	"$DIST/nethunter-companion-$VARIANT.zip"
+	"$DIST/nethunter-battery-$VARIANT.zip"
+)
+
+# --- 4. Publica os zips: raiz do repo (symlink) e SD externo do S20 ----------
+#
+# O recovery so enxerga o SD externo, e a raiz do repo e onde se procura o
+# artefato mais recente sem navegar na arvore. Os symlinks da raiz sao
+# recriados a cada build (os da rodada anterior saem junto), e estao no
+# .gitignore.
+find "$DIR" -maxdepth 1 -name '*.zip' -type l -delete
+for z in "${ZIPS[@]}"; do
+	ln -sfn "${z#"$DIR"/}" "$DIR/$(basename "$z")"
+done
+
+# Copia para o SD e best-effort: se o celular nao responder, o build nao falha.
+# O nome do ponto de montagem e o UUID do cartao, entao e descoberto na hora --
+# trocar de cartao muda o caminho.
+SD_HOST=${SD_HOST:-root@s20}
+if SD_DIR=$(timeout 15 ssh -o ConnectTimeout=8 -o BatchMode=yes "$SD_HOST" \
+		'ls -d /storage/????-???? 2>/dev/null | head -1' 2>/dev/null) &&
+   [ -n "$SD_DIR" ]; then
+	if timeout 300 scp -q "${ZIPS[@]}" "$SD_HOST:$SD_DIR/" 2>/dev/null; then
+		echo ">> SD do S20 : $SD_HOST:$SD_DIR (${#ZIPS[@]} zips)"
+	else
+		echo "!! copia para $SD_HOST:$SD_DIR falhou -- copie na mao" >&2
+	fi
+else
+	echo "!! S20 fora de alcance ($SD_HOST): zips nao foram para o SD" >&2
+fi
+
 echo
 echo ">> $(cat "$OUT/include/config/kernel.release")"
 echo ">> kernel   : $DIST/$VERSION.zip ($(du -h "$DIST/$VERSION.zip" | cut -f1))"
