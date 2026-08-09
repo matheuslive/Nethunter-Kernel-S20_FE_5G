@@ -2965,6 +2965,15 @@ void sec_bat_aging_check(struct sec_battery_info *battery)
 		 __func__, ret ? "Succeed in" : "Fail to",
 		 prev_step, battery->pdata->age_step, battery->batt_cycle);
 }
+
+/* Wrapper publico para o atributo batt_age_step do sysfs: a
+ * sec_bat_set_aging_step() e __visible_for_testing, que sem CONFIG_KUNIT
+ * expande para "static" e nao sai deste arquivo.
+ */
+bool sec_bat_force_aging_step(struct sec_battery_info *battery, int step)
+{
+	return sec_bat_set_aging_step(battery, step);
+}
 #endif
 
 void sec_bat_check_battery_health(struct sec_battery_info *battery)

@@ -72,6 +72,7 @@ reaplica a cada boot.
 | slate mode, store mode | ✅ | ✅ |
 | `SIOP_LEVEL` + `SIOP_LOCK`, `WC_*`, `SKIP_SWELLING`, `SAFETY_TIMER`, `WDT_KICK_DISABLE`, `BATTERY_CYCLE` | ✅ | ✅ |
 | `FLOAT_VOLTAGE`, correntes, corrente de corte, limites térmicos, `WPC_TEMP_*` | ❌ | ✅ |
+| `AGE_STEP` (exige **v4.5+**) | ❌ | ✅ |
 
 ### SIOP e o `siop.sh` absorvido
 
@@ -95,6 +96,26 @@ Baixar o número devolve a tensão de célula nova, desfazendo a proteção que 
 kernel aplica a uma velha. Depois de escrever, o `battctl` dispara
 `battery_cycle_test`, que é quem chama o `sec_bat_aging_check()` — sem isso o
 degrau só seria recalculado no próximo boot.
+
+### `AGE_STEP` é o caminho direto (v4.5+)
+
+O `BATTERY_CYCLE` chega no mesmo lugar **mentindo a contagem de ciclos**, que
+também alimenta o `sec_bat_check_battery_health()` — você perde a leitura real
+do desgaste junto. O `AGE_STEP` fixa o degrau sem tocar no contador: escreve em
+`batt_age_step`, que chama o `sec_bat_set_aging_step()` direto, pulando o
+recálculo por ciclos. `0` = célula nova (4380 mV no r8q), `4` = o último degrau.
+
+Vale para o pacote inteiro — float, `swelling_normal_float_voltage`, tensão de
+recarga e condição de cheio —, ao contrário do `FLOAT_VOLTAGE`, que só empurra
+`VOLTAGE_MAX` ao charger e é desfeito por qualquer swelling/step charging.
+
+É o único atributo deste sysfs que **recusa com `-EINVAL`** um valor inválido
+em vez de aceitar e ignorar em silêncio; nele o código de retorno do write vale.
+Se os dois estiverem no arquivo de configuração, o `AGE_STEP` é aplicado depois
+do `BATTERY_CYCLE` e vence.
+
+⚠️ A proteção existe por um motivo: numa célula com ~1700 ciclos, fixar o
+degrau 0 é carregar a 4380 mV justamente o que já está gasto.
 
 Os `batt_tune_*` só são criados com `CONFIG_ENG_BATTERY_CONCEPT=y`, habilitado
 no `wirus_defconfig` a partir da v4.3. Sem eles o módulo instala e funciona,

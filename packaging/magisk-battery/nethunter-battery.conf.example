@@ -86,6 +86,16 @@
 # uma celula nova, desfazendo a protecao que o kernel aplica a uma velha.
 #BATTERY_CYCLE=1706
 
+# Fixa o degrau de age forecast direto, sem passar pelo calculo por ciclos:
+# 0 = celula nova (4380 mV no r8q), 4 = o ultimo degrau. E o caminho honesto
+# para quem quer a tensao alta -- BATTERY_CYCLE chega no mesmo lugar mentindo
+# a contagem de ciclos, que tambem alimenta o indicador de saude da bateria.
+# Aplicado depois do BATTERY_CYCLE, entao vence se os dois estiverem aqui.
+# Exige o kernel Nethunter r8q v4.5+ (o atributo nao existe no stock).
+# AVISO: a protecao existe por um motivo -- numa celula com 1700 ciclos,
+# fixar o degrau 0 e carregar a 4380 mV justamente o que ja esta gasto.
+#AGE_STEP=0
+
 # --- comportamento do modulo (nao vao para o sysfs) --------------------------
 
 # Segundos de espera depois do sys.boot_completed antes de aplicar. O framework

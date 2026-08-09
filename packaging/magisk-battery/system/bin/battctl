@@ -71,6 +71,7 @@ SKIP_SWELLING|batt_swelling_control|0|1|-|1 DESLIGA o swelling mode (a protecao 
 SAFETY_TIMER|safety_timer_set|0|1|-|timer de seguranca: corta a carga se demorar demais
 WDT_KICK_DISABLE|batt_wdt_control|0|1|-|1 para de alimentar o watchdog do charger
 BATTERY_CYCLE|battery_cycle|0|9999|ciclos|ciclos da celula; define o degrau de age forecast
+AGE_STEP|batt_age_step|0|9|degrau|fixa o degrau de age forecast (0 = celula nova); no r8q vai a 4
 '
 
 # Chaves que configuram o MODULO, nao o driver: nao tem atributo em sysfs.

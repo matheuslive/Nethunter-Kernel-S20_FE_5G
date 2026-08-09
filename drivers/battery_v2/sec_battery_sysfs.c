@@ -121,6 +121,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(fg_fullcapnom),
 	SEC_BATTERY_ATTR(battery_cycle),
 	SEC_BATTERY_ATTR(battery_cycle_test),
+	SEC_BATTERY_ATTR(batt_age_step),
 #endif
 	SEC_BATTERY_ATTR(batt_wpc_temp),
 	SEC_BATTERY_ATTR(batt_wpc_temp_adc),
@@ -898,6 +899,14 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->batt_cycle);
 		break;
 	case BATTERY_CYCLE_TEST:
+		break;
+	case BATT_AGE_STEP:
+		/* So o degrau, para a releitura ecoar o que foi escrito -- e o que
+		 * permite a quem escreve conferir se pegou. O numero de degraus e a
+		 * float resultante saem no dev_info abaixo e no batt_tune_float_voltage.
+		 */
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			battery->pdata->age_step);
 		break;
 #endif
 	case BATT_WPC_TEMP:
@@ -2644,6 +2653,29 @@ ssize_t sec_bat_store_attrs(
 	case BATTERY_CYCLE_TEST:
 		sec_bat_aging_check(battery);
 	break;
+	case BATT_AGE_STEP:
+		/* Fixa o degrau de age forecast a mao. O caminho normal e o
+		 * sec_bat_aging_check(), que escolhe o degrau pelos ciclos e so
+		 * roda quando battery_cycle_test e escrito -- aqui pulamos o
+		 * calculo e aplicamos o step pedido, com o pacote completo
+		 * (float, recarga e condicao de cheio), nao so a float como o
+		 * batt_tune_float_voltage faz.
+		 *
+		 * A propria sec_bat_set_aging_step() recusa step fora de
+		 * [0, num_age_step) e devolve false; aqui isso vira -EINVAL para
+		 * o escritor saber que nao pegou (o write silencioso e o que mais
+		 * confunde no resto deste sysfs).
+		 */
+		if (sscanf(buf, "%10d\n", &x) == 1) {
+			if (!sec_bat_force_aging_step(battery, x))
+				return -EINVAL;
+			dev_info(battery->dev,
+				"%s: BATT_AGE_STEP(%d/%d) float(%dmV)\n", __func__,
+				x, battery->pdata->num_age_step - 1,
+				battery->pdata->chg_float_voltage);
+			ret = count;
+		}
+		break;
 #endif
 	case BATT_WPC_TEMP:
 	case BATT_WPC_TEMP_ADC:

@@ -791,6 +791,14 @@ extern int sec_bat_set_charge(struct sec_battery_info *battery, int chg_mode);
 extern int sec_bat_set_charging_current(struct sec_battery_info *battery);
 extern void sec_bat_refresh_charging_current(struct sec_battery_info *battery);
 extern void sec_bat_aging_check(struct sec_battery_info *battery);
+#if defined(CONFIG_BATTERY_AGE_FORECAST)
+/* Fixa o degrau de age forecast, pulando o recalculo por ciclos do
+ * sec_bat_aging_check(). Wrapper porque a sec_bat_set_aging_step() e
+ * __visible_for_testing, que sem CONFIG_KUNIT expande para "static" e
+ * portanto nao pode ser chamada do sec_battery_sysfs.c.
+ */
+extern bool sec_bat_force_aging_step(struct sec_battery_info *battery, int step);
+#endif
 extern void sec_wireless_set_tx_enable(struct sec_battery_info *battery, bool wc_tx_enable);
 extern void sec_bat_check_wc_re_auth(struct sec_battery_info *battery);
 
