@@ -1,0 +1,121 @@
+########## MEMORIA ##########
+MemTotal:        5759240 kB
+MemFree:          130100 kB
+MemAvailable:    1480860 kB
+Buffers:            1996 kB
+Cached:          1510852 kB
+SwapCached:        36728 kB
+Active:          1439836 kB
+Inactive:         926092 kB
+Active(anon):    1019656 kB
+Inactive(anon):   370776 kB
+Active(file):     420180 kB
+Inactive(file):   555316 kB
+Unevictable:        4512 kB
+Mlocked:            4512 kB
+RbinTotal:        512000 kB
+RbinAlloced:        9352 kB
+RbinPool:              0 kB
+RbinFree:          17424 kB
+RbinCached:       485176 kB
+ZeroedFree:        48124 kB
+SwapTotal:       3145724 kB
+SwapFree:         538472 kB
+Dirty:                 0 kB
+Writeback:             0 kB
+AnonPages:       1336276 kB
+Mapped:           775736 kB
+Shmem:             51988 kB
+KReclaimable:     160248 kB
+Slab:             590212 kB
+SReclaimable:     149888 kB
+SUnreclaim:       440324 kB
+KernelStack:       83536 kB
+PageTables:       115264 kB
+NFS_Unstable:          0 kB
+Bounce:                0 kB
+WritebackTmp:          0 kB
+CommitLimit:     5769344 kB
+Committed_AS:   100408028 kB
+VmallocTotal:   263061440 kB
+VmallocUsed:      137164 kB
+VmallocChunk:          0 kB
+Percpu:            31264 kB
+AnonHugePages:         0 kB
+ShmemHugePages:        0 kB
+ShmemPmdMapped:        0 kB
+HugepagePool:          0 kB
+CmaTotal:         458752 kB
+CmaFree:              80 kB
+--- swaps
+Filename				Type		Size	Used	Priority
+/dev/block/zram0                        partition	3145724	2607252	-2
+--- zram0
+comp_algorithm: lzo [lzo-rle] 
+disksize: 3221225472
+mm_stat (orig compr mem_used same pages_compacted huge...): 2661781504 796957986 869486592        0 1151913984    41514  7343071    36366        0        0
+--- vm knobs
+swappiness=160
+dirty_ratio=0
+dirty_background_ratio=0
+vfs_cache_pressure=100
+extra_free_kbytes=87964
+watermark_scale_factor=10
+min_free_kbytes=8548
+page-cluster=0
+--- vmstat (selecao)
+pgpgin 759429936
+pgpgout 57530164
+pgpgoutclean 218037260
+pswpin 64807729
+pswpout 92231944
+pgfault 1103345993
+pgmajfault 72286091
+compact_stall 6080
+thp_fault_alloc 0
+thp_fault_fallback 638723
+thp_collapse_alloc 0
+thp_collapse_alloc_failed 0
+thp_file_alloc 0
+thp_file_mapped 0
+thp_split_page 0
+thp_split_page_failed 0
+thp_deferred_split_page 0
+thp_deferred_split_page_current 0
+thp_split_pmd 1341
+thp_zero_page_alloc 1
+thp_zero_page_alloc_failed 0
+thp_swpout 0
+thp_swpout_fallback 0
+
+########## I/O ##########
+sda: sched=noop deadline [cfq]  ra=128 nr_req=256
+sdb: sched=noop deadline [cfq]  ra=128 nr_req=256
+sdc: sched=noop deadline [cfq]  ra=128 nr_req=256
+sdd: sched=noop deadline [cfq]  ra=128 nr_req=256
+--- diskstats
+   8       0 sda 42985684 2680633 1462183536 39965722 5691415 44036 114947864 52161340 0 6881752 93031288 2988466 0 109596664 1583912
+   8      16 sdb 5 0 40 1 0 0 0 0 0 4 4 0 0 0 0
+   8      32 sdc 5 0 40 0 0 0 0 0 0 0 0 0 0 0 0
+   8      48 sdd 20 0 4568 11 0 0 0 0 0 16 16 0 0 0 0
+
+########## REDE ##########
+tcp_congestion_control: bic
+available: reno bic cubic westwood htcp lia olia wvegas
+
+########## BATERIA ##########
+capacity=40
+batt_current_ua_now=-329062
+current_now=-998
+voltage_now=3709000
+batt_temp=324
+temp=326
+charge_full=4500000
+charge_full_design=4500000
+batt_tune_float_voltage=4270
+batt_misc_event=983040
+status=Discharging
+health=Good
+charge_type=N/A
+--- age step (para validar a v4.5 depois)
+sh: syntax error: unexpected '('

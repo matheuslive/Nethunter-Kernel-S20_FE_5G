@@ -1,0 +1,135 @@
+########## IDENTIFICACAO ##########
+data_device: Mon Aug 10 20:00:20 -03 2026
+uptime_raw: 168227.87 871620.46
+uptime:  20:00:20 up 1 day, 22:43,  load average: 0.47, 0.62, 0.33
+kernel: Linux version 4.19.113-NetHunter_matheuslive_r8q_v4.4 (matheus@pve-deneb) (clang version 10.0.6 for Android NDK Found CUDA installation: /usr/local/cuda, version 7.0) #26 SMP PREEMPT Sat Aug 8 20:31:19 -03 2026
+release: 4.19.113-NetHunter_matheuslive_r8q_v4.4
+screen:   mScreenState=ON
+bootcount/reset: 
+
+########## SUSPEND STATS ##########
+success: 47977
+fail: 16496
+failed_freeze: 5541
+failed_prepare: 0
+failed_suspend: 7104
+failed_suspend_late: 42
+failed_suspend_noirq: 327
+failed_resume: 0
+failed_resume_early: 0
+failed_resume_noirq: 0
+failures:
+  last_failed_dev:	0000:01:00.0
+			0000:01:00.0
+  last_failed_errno:	-16
+			-11
+  last_failed_step:	suspend
+			suspend
+
+########## PSI (pressao acumulada) ##########
+--- cpu
+some avg10=3.29 avg60=4.13 avg300=6.52 total=11269861013
+--- io
+some avg10=0.00 avg60=0.16 avg300=0.59 total=1411133796
+full avg10=0.00 avg60=0.06 avg300=0.27 total=839521806
+--- memory
+some avg10=0.00 avg60=0.12 avg300=0.52 total=865304016
+full avg10=0.00 avg60=0.03 avg300=0.19 total=373393728
+
+########## CPUFREQ ##########
+--- /sys/devices/system/cpu/cpufreq/policy0
+affected_cpus: 0 1 2 3
+governor: schedutil
+cur: 1804800  scaling_min: 691200  scaling_max: 1804800
+cpuinfo_min: 300000  cpuinfo_max: 1804800
+schedutil:
+  down_rate_limit_us=0
+  fb_legacy=0
+  hispeed_freq=1248000
+  hispeed_load=90
+  pl=1
+  rtg_boost_freq=1000000
+  up_rate_limit_us=0
+time_in_state:
+  (indisponivel -- CPU_FREQ_STAT off na v4.4)
+--- /sys/devices/system/cpu/cpufreq/policy4
+affected_cpus: 4 5 6
+governor: schedutil
+cur: 2419200  scaling_min: 710400  scaling_max: 2419200
+cpuinfo_min: 710400  cpuinfo_max: 2419200
+schedutil:
+  down_rate_limit_us=0
+  fb_legacy=0
+  hispeed_freq=1574400
+  hispeed_load=90
+  pl=1
+  rtg_boost_freq=0
+  up_rate_limit_us=0
+time_in_state:
+  (indisponivel -- CPU_FREQ_STAT off na v4.4)
+--- /sys/devices/system/cpu/cpufreq/policy7
+affected_cpus: 7
+governor: schedutil
+cur: 844800  scaling_min: 844800  scaling_max: 2841600
+cpuinfo_min: 844800  cpuinfo_max: 2841600
+schedutil:
+  down_rate_limit_us=0
+  fb_legacy=0
+  hispeed_freq=1632000
+  hispeed_load=90
+  pl=1
+  rtg_boost_freq=0
+  up_rate_limit_us=0
+time_in_state:
+  (indisponivel -- CPU_FREQ_STAT off na v4.4)
+
+########## CPUIDLE ##########
+cpu0: C0[usage=108079032 time=60003471038] C1[usage=5969638 time=30637127882] 
+cpu1: C0[usage=66479159 time=54240396861] C1[usage=5311970 time=39385698225] 
+cpu2: C0[usage=66472169 time=55074968186] C1[usage=5399325 time=38803823085] 
+cpu3: C0[usage=90994485 time=73333748415] C1[usage=6072604 time=32534044631] 
+cpu4: C0[usage=35372532 time=26834677071] C1[usage=4993591 time=89878779321] 
+cpu5: C0[usage=35877844 time=27839972203] C1[usage=5730571 time=88169241112] 
+cpu6: C0[usage=45072746 time=75211935022] C1[usage=2193674 time=39094825282] 
+cpu7: C0[usage=19773801 time=17280597135] C1[usage=1087341 time=101400453283] 
+
+########## CORE_CTL ##########
+--- /sys/devices/system/cpu/cpu0/core_ctl
+  active_cpus=4
+  busy_down_thres=0 0 0 0 
+  busy_up_thres=0 0 0 0 
+  enable=0
+  global_state=CPU0
+  max_cpus=4
+  min_cpus=1
+  need_cpus=4
+  not_preferred=CPU#0: 0
+  nr_prev_assist_thresh=4294967295
+  offline_delay_ms=100
+  task_thres=4294967295
+--- /sys/devices/system/cpu/cpu4/core_ctl
+  active_cpus=2
+  busy_down_thres=30 30 30 
+  busy_up_thres=60 60 60 
+  enable=1
+  global_state=CPU0
+  max_cpus=3
+  min_cpus=2
+  need_cpus=2
+  not_preferred=CPU#4: 0
+  nr_prev_assist_thresh=4294967295
+  offline_delay_ms=100
+  task_thres=3
+--- /sys/devices/system/cpu/cpu7/core_ctl
+  active_cpus=0
+  busy_down_thres=30 
+  busy_up_thres=60 
+  enable=1
+  global_state=CPU0
+  max_cpus=1
+  min_cpus=0
+  need_cpus=0
+  not_preferred=CPU#7: 0
+  nr_prev_assist_thresh=1
+  offline_delay_ms=100
+  task_thres=1
