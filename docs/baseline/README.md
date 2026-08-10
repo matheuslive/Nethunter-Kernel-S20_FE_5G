@@ -58,10 +58,18 @@ path removidos na v4.6 encarecem — o que torna essa medição promissora.
 **As 4 frequências mais baixas do little nunca são usadas.** Somando
 `uid_time_in_state` sobre **todos** os UIDs, o tempo em 300000, 403200, 518400 e
 614400 kHz é **exatamente 0**; tudo começa em 691200. Bate com
-`scaling_min_freq=691200` contra `cpuinfo_min_freq=300000`, confirmado
-persistente (não era boost transitório). Não é cooling device (todos em 0), não é
-`/sys/power/cpufreq_min_limit` (-1) e não é `msm_performance` (`cpu_min_freq=0`).
-**Falta descobrir quem impõe** — são os degraus mais eficientes do cluster.
+`scaling_min_freq=691200` contra `cpuinfo_min_freq=300000`. Não é cooling device
+(todos em 0), não é `/sys/power/cpufreq_min_limit` (-1) e não é
+`msm_performance` (`cpu_min_freq=0`). **Falta descobrir quem impõe** — são os
+degraus mais eficientes do cluster.
+
+> **Correção (2026-08-10, pós-boot da v4.6):** a primeira redação dizia que o
+> piso de 691200 era "permanente". Ele é **dinâmico** — nos primeiros minutos
+> após o boot foi observado em **1113600**, caindo de volta a 691200 quando a
+> carga de boot passou (6 amostras seguidas). O que se sustenta é o piso de
+> **repouso** em 691200 e o fato de as 4 frequências abaixo dele acumularem
+> tempo zero em 46 h. Ao investigar quem impõe, procurar um mecanismo que
+> *ajusta* o floor conforme a carga, não um valor fixo.
 
 **Memória sob pressão:** `MemFree` ~200 MB de 5,7 GB, zram 78% cheio (2,4 de
 3 GB, `lzo-rle`), `swappiness=160`.
