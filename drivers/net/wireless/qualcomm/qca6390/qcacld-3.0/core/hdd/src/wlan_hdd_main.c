@@ -7766,6 +7766,19 @@ int wlan_hdd_set_mon_chan(struct hdd_adapter *adapter, qdf_freq_t freq,
 		return -EINVAL;
 	}
 
+	/*
+	 * QCA6390: re-setting the SAME channel issues a vdev restart the
+	 * firmware never answers; the host then self-recovers into a wedge
+	 * (hard reboot). airodump-ng/hcxdumptool re-set the current channel
+	 * on every refresh, so short-circuit the no-op before touching FW.
+	 */
+	if (adapter->mon_chan_freq == freq &&
+	    adapter->mon_bandwidth == bandwidth) {
+		hdd_debug("monitor already on freq %d bw %d, skip vdev restart",
+			  freq, bandwidth);
+		return 0;
+	}
+
 	/* Verify the BW before accepting this request */
 	ch_width = bandwidth;
 

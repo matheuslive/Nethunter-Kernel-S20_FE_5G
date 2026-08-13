@@ -23397,6 +23397,18 @@ int wlan_hdd_change_hw_mode_for_given_chnl(struct hdd_adapter *adapter,
 
 	hdd_enter();
 
+	/*
+	 * QCA6390: the SMM->DBS hw-mode transition the policy manager drives
+	 * here is mishandled by the firmware for a monitor vdev and is one of
+	 * the triggers of the monitor set-channel wedge. Monitor never needs
+	 * DBS, so skip the whole hw-mode change for it.
+	 */
+	if (adapter->device_mode == QDF_MONITOR_MODE) {
+		hdd_debug("monitor mode: skip DBS hw-mode change");
+		hdd_exit();
+		return 0;
+	}
+
 	status = policy_mgr_reset_connection_update(hdd_ctx->psoc);
 	if (!QDF_IS_STATUS_SUCCESS(status))
 		hdd_err("clearing event failed");
@@ -23497,6 +23509,19 @@ static int __wlan_hdd_cfg80211_set_mon_ch(struct wiphy *wiphy,
 	/* Verify the BW before accepting this request */
 	ch_width = hdd_map_nl_chan_width(chandef->width);
 
+	/*
+	 * QCA6390: re-setting the SAME channel issues a vdev restart the
+	 * firmware never answers; the host then self-recovers into a wedge
+	 * (hard reboot). airodump-ng/hcxdumptool re-set the current channel
+	 * on every refresh, so short-circuit the no-op before touching FW.
+	 */
+	if (adapter->mon_chan_freq == chandef->chan->center_freq &&
+	    adapter->mon_bandwidth == ch_width) {
+		hdd_debug("monitor already on freq %d bw %d, skip vdev restart",
+			  chandef->chan->center_freq, ch_width);
+		return 0;
+	}
+
 	if (ch_width > CH_WIDTH_10MHZ ||
 	   (!cds_is_sub_20_mhz_enabled() && ch_width > CH_WIDTH_160MHZ)) {
 		hdd_err("invalid BW received %d", ch_width);
@@ -23582,6 +23607,10 @@ static int __wlan_hdd_cfg80211_set_mon_ch(struct wiphy *wiphy,
 		adapter->monitor_mode_vdev_up_in_progress = false;
 		return qdf_status_to_os_return(status);
 	}
+
+	/* remember the capture channel so a same-channel re-set is a no-op */
+	adapter->mon_chan_freq = chandef->chan->center_freq;
+	adapter->mon_bandwidth = ch_width;
 
 	hdd_exit();
 

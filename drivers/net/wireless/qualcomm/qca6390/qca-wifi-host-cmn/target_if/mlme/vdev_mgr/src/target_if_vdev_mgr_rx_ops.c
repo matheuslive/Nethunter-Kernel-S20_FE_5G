@@ -32,6 +32,7 @@
 #include <wlan_vdev_mlme_main.h>
 #include <wmi_unified_vdev_api.h>
 #include <target_if_psoc_wake_lock.h>
+#include <wlan_objmgr_vdev_obj.h>
 
 static inline
 void target_if_vdev_mgr_handle_recovery(struct wlan_objmgr_psoc *psoc,
@@ -39,8 +40,32 @@ void target_if_vdev_mgr_handle_recovery(struct wlan_objmgr_psoc *psoc,
 					enum qdf_hang_reason recovery_reason,
 					uint16_t rsp_pos)
 {
+	struct wlan_objmgr_vdev *vdev;
+	enum QDF_OPMODE opmode = QDF_MAX_NO_OF_MODE;
+
 	mlme_nofl_err("PSOC_%d VDEV_%d: %s rsp timeout", wlan_psoc_get_id(psoc),
 		      vdev_id, string_from_rsp_bit(rsp_pos));
+
+	vdev = wlan_objmgr_get_vdev_by_id_from_psoc(psoc, vdev_id,
+						    WLAN_VDEV_TARGET_IF_ID);
+	if (vdev) {
+		opmode = wlan_vdev_mlme_get_opmode(vdev);
+		wlan_objmgr_vdev_release_ref(vdev, WLAN_VDEV_TARGET_IF_ID);
+	}
+
+	/*
+	 * QCA6390 firmware never answers a monitor-vdev start/restart, so the
+	 * response timer would self-recover (SSR) and, on this chip, wedge the
+	 * device into a hard reboot. Skip recovery for monitor mode: the
+	 * timeout is still propagated up (set_mon_ch returns an error) and the
+	 * netdev stays usable, so at worst the channel set fails cleanly.
+	 */
+	if (opmode == QDF_MONITOR_MODE) {
+		mlme_nofl_err("PSOC_%d VDEV_%d: monitor rsp timeout, skip self-recovery",
+			      wlan_psoc_get_id(psoc), vdev_id);
+		return;
+	}
+
 	if (target_if_vdev_mgr_is_panic_allowed())
 		qdf_trigger_self_recovery(psoc, recovery_reason);
 	else
