@@ -1,0 +1,175 @@
+#!/system/bin/sh
+# wmon -- coloca a interface WiFi em modo monitor e abre o airodump-ng.
+#
+# Roda SOB DEMANDA, como root (sudo/su), no proprio aparelho (Termux).
+#
+# Escolha da interface (autodetecta, nesta ordem):
+#   1. wlan1  -> dongle USB externo (ath9k_htc, RTL8812AU, mt7601u, ...). E o
+#               caminho ESTAVEL do NetHunter: monitor + injection, hopping livre,
+#               nao mexe no wlan0 interno. Carregue o driver antes com 'usbwifi'.
+#   2. wlan0  -> radio interno QCA6390 (fallback). Via con_mode=4. FUNCIONA em
+#               parte, mas trocar de canal DEADLOCKA o driver (D-state, exige
+#               hard reboot). Por isso no interno o canal e OBRIGATORIO e fixo
+#               (sem hopping) -- e ainda assim e um tiro no escuro. Prefira o
+#               dongle.
+#
+# Uso:
+#   wmon                 autodetecta a interface; dongle=hop, interno=exige -c
+#   wmon -c 6            trava no canal 6
+#   wmon -i wlan1        forca a interface
+#   wmon -i wlan1 -c 36  interface + canal
+#   wmon -- --band a     tudo apos '--' vai direto pro airodump-ng
+#   wmon -l              lista as interfaces WiFi vistas e sai
+#   wmon -h              esta ajuda
+#
+# No interno o monitor e GLOBAL: derruba o WiFi/STA enquanto captura (por isso
+# rode LOCAL, nunca por SSH sobre WiFi). Ao sair, o wmon volta sozinho: dongle
+# -> managed; interno -> con_mode=0 + religa o WiFi.
+
+die() { echo "wmon: $*" >&2; exit 1; }
+
+# A ajuda tem que funcionar antes de qualquer checagem.
+case "${1:-}" in
+  -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+esac
+
+# --- resolucao de binarios ---------------------------------------------------
+# sudo/su costuma zerar o PATH, e iw/airodump-ng podem estar no prefixo do
+# Termux (ou no chroot do Kali). Procura no PATH e depois nos locais conhecidos.
+TERMUX=/data/data/com.termux/files/usr
+resolve() {
+  p=$(command -v "$1" 2>/dev/null) && { echo "$p"; return 0; }
+  for d in "$TERMUX/bin" /usr/bin /system/bin /vendor/bin; do
+    [ -x "$d/$1" ] && { echo "$d/$1"; return 0; }
+  done
+  return 1
+}
+
+IP=$(resolve ip)   || die "'ip' nao encontrado."
+IW=$(resolve iw)   || die "'iw' nao encontrado (pkg install iw no Termux)."
+AIRO=$(resolve airodump-ng) \
+  || die "airodump-ng nao encontrado (instale o aircrack-ng no Termux/chroot)."
+
+# airodump/iw do Termux precisam achar as libs deles.
+case "$AIRO" in "$TERMUX"*) NEED_TLIB=1 ;; esac
+case "$IW"   in "$TERMUX"*) NEED_TLIB=1 ;; esac
+[ -n "${NEED_TLIB:-}" ] && export LD_LIBRARY_PATH="$TERMUX/lib:${LD_LIBRARY_PATH:-}"
+
+is_wifi() {  # $1 = nome da interface; true se ela existe e tem phy80211
+  [ -e "/sys/class/net/$1/phy80211" ]
+}
+
+if [ "${1:-}" = "-l" ] || [ "${1:-}" = "--list" ]; then
+  echo "wmon: interfaces WiFi:"
+  found=0
+  for n in /sys/class/net/*; do
+    i=${n##*/}
+    is_wifi "$i" || continue
+    found=1
+    st=$(cat "$n/operstate" 2>/dev/null)
+    ty=$($IW dev "$i" info 2>/dev/null | awk '/type/{print $2; exit}')
+    echo "    $i  (operstate=$st, type=${ty:-?})"
+  done
+  [ "$found" = 1 ] || echo "    (nenhuma)"
+  exit 0
+fi
+
+# --- root --------------------------------------------------------------------
+[ "$(id -u)" = 0 ] || die "precisa ser root (rode com sudo/su)."
+
+# --- argumentos --------------------------------------------------------------
+IFACE=""; CHAN=""; EXTRA=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    -i|--iface)   IFACE=${2:?wmon: -i exige o nome da interface}; shift 2 ;;
+    -c|--channel) CHAN=${2:?wmon: -c exige o numero do canal};    shift 2 ;;
+    --) shift; EXTRA="$*"; break ;;
+    -*) die "opcao desconhecida: $1 (veja 'wmon -h')" ;;
+    *)  die "argumento inesperado: $1 (canal e '-c $1'; veja 'wmon -h')" ;;
+  esac
+done
+
+# --- autodeteccao da interface ----------------------------------------------
+if [ -z "$IFACE" ]; then
+  if is_wifi wlan1; then
+    IFACE=wlan1
+  elif is_wifi wlan0; then
+    IFACE=wlan0
+  else
+    die "nenhuma interface WiFi (wlan1/wlan0). Dongle plugado? tente 'usbwifi'."
+  fi
+fi
+is_wifi "$IFACE" || die "interface '$IFACE' nao existe ou nao e WiFi."
+
+# =============================================================================
+# Caminho A: radio interno QCA6390 (wlan0) via con_mode
+# =============================================================================
+CONMODE=/sys/module/wlan/parameters/con_mode
+if [ "$IFACE" = "wlan0" ]; then
+  [ -w "$CONMODE" ] || die "$CONMODE ausente: kernel sem o wlan built-in?"
+
+  # Sem canal fixo o airodump faria hopping -> 'iw set channel' em loop ->
+  # deadlock certo. No interno o canal e obrigatorio.
+  [ -n "$CHAN" ] || die "no wlan0 interno o canal e OBRIGATORIO (ex.: wmon -c 6).
+       hopping trava o driver. Melhor ainda: use um dongle USB (wlan1)."
+
+  # con_mode=4 com wlan0 DOWN + 'ip link up' trava o driver. Exige o wlan0 JA
+  # up/conectado a um AP antes de entrar em monitor (registrado em teste).
+  st=$(cat /sys/class/net/wlan0/operstate 2>/dev/null)
+  [ "$st" = "up" ] || die "wlan0 esta '$st', precisa estar 'up' (conecte a um
+       WiFi primeiro; NAO deixe o wmon dar 'ip link up' -- isso deadlocka)."
+
+  echo "wmon: ! wlan0 INTERNO. Trocar de canal pode DEADLOCKAR o driver e"
+  echo "wmon: ! exigir hard reboot (echo b > /proc/sysrq-trigger). Prefira dongle."
+  echo "wmon: monitor GLOBAL vai derrubar seu WiFi/STA agora."
+
+  cleanup_internal() {
+    echo ""
+    echo "wmon: saindo do monitor (con_mode=0) e religando o WiFi..."
+    echo 0 > "$CONMODE" 2>/dev/null
+    svc wifi disable 2>/dev/null; svc wifi enable 2>/dev/null
+    echo "wmon: pronto. Se o WiFi nao voltar, reconecte pelas Configuracoes."
+  }
+  trap cleanup_internal EXIT INT TERM
+
+  echo "wmon: entrando em monitor global (con_mode=4)..."
+  echo 4 > "$CONMODE" || die "escrita em con_mode falhou."
+  # NAO fazer 'ip link up' aqui: wlan0 ja esta up e o up em monitor trava.
+
+  echo "wmon: airodump-ng no wlan0, canal $CHAN (sem hopping)"
+  # shellcheck disable=SC2086
+  "$AIRO" -c "$CHAN" $EXTRA wlan0
+  exit 0
+fi
+
+# =============================================================================
+# Caminho B: dongle USB (wlan1 ou outro) via nl80211 padrao
+# =============================================================================
+cleanup_dongle() {
+  echo ""
+  echo "wmon: restaurando $IFACE para managed..."
+  $IP link set "$IFACE" down 2>/dev/null
+  $IW dev "$IFACE" set type managed 2>/dev/null
+  $IP link set "$IFACE" up 2>/dev/null
+  echo "wmon: pronto."
+}
+trap cleanup_dongle EXIT INT TERM
+
+echo "wmon: colocando $IFACE em monitor..."
+$IP link set "$IFACE" down                    || die "nao consegui derrubar $IFACE"
+# 'set monitor control' e preferido; alguns drivers so aceitam 'set type monitor'.
+$IW dev "$IFACE" set monitor control 2>/dev/null \
+  || $IW dev "$IFACE" set type monitor        || die "nao entrou em monitor"
+$IP link set "$IFACE" up                       || die "nao consegui subir $IFACE"
+
+if [ -n "$CHAN" ]; then
+  $IW dev "$IFACE" set channel "$CHAN" 2>/dev/null \
+    || echo "wmon: aviso: nao fixou o canal $CHAN (segue no hopping)"
+  echo "wmon: airodump-ng no $IFACE, canal $CHAN"
+  # shellcheck disable=SC2086
+  "$AIRO" -c "$CHAN" $EXTRA "$IFACE"
+else
+  echo "wmon: airodump-ng no $IFACE (hopping em todos os canais)"
+  # shellcheck disable=SC2086
+  "$AIRO" $EXTRA "$IFACE"
+fi

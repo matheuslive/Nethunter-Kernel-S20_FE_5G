@@ -31,7 +31,7 @@ esac
 
 ui_print "- Ajustando permissoes"
 set_perm_recursive "$MODPATH" 0 0 0755 0644
-for bin in hid-keyboard usbwifi; do
+for bin in hid-keyboard usbwifi wmon; do
   [ -f "$MODPATH/system/bin/$bin" ] && set_perm "$MODPATH/system/bin/$bin" 0 0 0755
 done
 
@@ -40,6 +40,7 @@ ui_print "- Drivers de dongle WiFi vem como .ko (nao mais built-in),"
 ui_print "  com $FWCOUNT firmwares para /vendor/firmware:"
 ui_print "    usbwifi        carrega o driver do dongle plugado"
 ui_print "    usbwifi -l     lista os drivers disponiveis"
+ui_print "    wmon           monitor + airodump-ng (dongle wlan1, senao wlan0)"
 
 # --- uso imediato, sem reboot ------------------------------------------------
 #
@@ -59,7 +60,7 @@ ui_print "    usbwifi -l     lista os drivers disponiveis"
 #               arquivo nosso la dentro.
 ui_print "- Publicando sem reboot:"
 
-for bin in hid-keyboard usbwifi; do
+for bin in hid-keyboard usbwifi wmon; do
   SRC=$MODPATH/system/bin/$bin
   if [ -d /debug_ramdisk ] && cp -f "$SRC" "/debug_ramdisk/$bin" 2>/dev/null; then
     chmod 0755 "/debug_ramdisk/$bin"

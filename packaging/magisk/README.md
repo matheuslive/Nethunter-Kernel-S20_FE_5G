@@ -10,7 +10,7 @@ additions" do `anykernel.sh` original tentavam fazer escrevendo em `/system` e
 | O quê | Onde no device | Como |
 |---|---|---|
 | Módulos `.ko` do kernel | `/system/lib/modules/` | magic mount |
-| `hid-keyboard`, `usbwifi` | `/system/bin/` | magic mount |
+| `hid-keyboard`, `usbwifi`, `wmon` | `/system/bin/` | magic mount |
 | Descriptors HID (`*.bin`) | `/system/etc/nethunter/` | magic mount |
 | Firmware dos dongles | `/vendor/firmware/` | magic mount (`system/vendor/`) |
 | `init.nethunter.rc` | importado no boot | `overlay.d/sbin/` |
@@ -50,3 +50,28 @@ insmod /system/lib/modules/can-isotp.ko
 insmod /system/lib/modules/can327.ko
 # etc.
 ```
+
+## Monitor mode + airodump-ng (`wmon`)
+
+Roda **sob demanda** no Termux, como root. Autodetecta a interface: prefere o
+**dongle USB (`wlan1`)** — o caminho estável do NetHunter — e cai no **rádio
+interno `wlan0`** só se não houver dongle.
+
+```sh
+sudo wmon              # autodetecta; dongle=hopping, interno=exige -c
+sudo wmon -c 6         # trava no canal 6
+sudo wmon -i wlan1 -c 36
+sudo wmon -l           # lista as interfaces WiFi
+sudo wmon -h
+```
+
+Ao sair (`Ctrl-C`), o `wmon` restaura sozinho: dongle → `managed`; interno →
+`con_mode=0` + religa o WiFi.
+
+⚠️ **No `wlan0` interno (QCA6390) o monitor é frágil.** Trocar de canal
+(`iw set channel`, que é o que o airodump faz ao pular canais) **deadlocka o
+driver qcacld** (D-state), exigindo hard reboot (`echo b > /proc/sysrq-trigger`).
+Por isso no interno o `wmon` **obriga um canal fixo** (`-c`) e exige o `wlan0`
+já conectado a um AP (`operstate=up`) antes de entrar em monitor — mas mesmo
+assim é arriscado. **Use um dongle USB** (`usbwifi` carrega o driver → vira
+`wlan1`) para captura confiável com hopping e injection.
