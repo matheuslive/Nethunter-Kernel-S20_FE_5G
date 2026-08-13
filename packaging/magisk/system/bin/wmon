@@ -20,6 +20,8 @@
 #   wmon -i wlan1 -c 36  interface + canal
 #   wmon -- --band a     tudo apos '--' vai direto pro airodump-ng
 #   wmon -l              lista as interfaces WiFi vistas e sai
+#   wmon -t              TESTE do monitor interno wlan0 (valida o fix v4.8.2)
+#   wmon -t -c 36        idem, no canal 36 (default 6)
 #   wmon -h              esta ajuda
 #
 # No interno o monitor e GLOBAL: derruba o WiFi/STA enquanto captura (por isso
@@ -30,7 +32,7 @@ die() { echo "wmon: $*" >&2; exit 1; }
 
 # A ajuda tem que funcionar antes de qualquer checagem.
 case "${1:-}" in
-  -h|--help) sed -n '2,35p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
+  -h|--help) awk 'NR>1{if(/^#/){sub(/^# ?/,"");print}else exit}' "$0"; exit 0 ;;
 esac
 
 # --- resolucao de binarios ---------------------------------------------------
@@ -78,16 +80,89 @@ fi
 [ "$(id -u)" = 0 ] || die "precisa ser root (rode com sudo/su)."
 
 # --- argumentos --------------------------------------------------------------
-IFACE=""; CHAN=""; EXTRA=""
+IFACE=""; CHAN=""; EXTRA=""; TEST=""
 while [ $# -gt 0 ]; do
   case "$1" in
     -i|--iface)   IFACE=${2:?wmon: -i exige o nome da interface}; shift 2 ;;
     -c|--channel) CHAN=${2:?wmon: -c exige o numero do canal};    shift 2 ;;
+    -t|--test)    TEST=1; shift ;;
     --) shift; EXTRA="$*"; break ;;
     -*) die "opcao desconhecida: $1 (veja 'wmon -h')" ;;
     *)  die "argumento inesperado: $1 (canal e '-c $1'; veja 'wmon -h')" ;;
   esac
 done
+
+# --- modo teste (-t): valida o fix de monitor interno da v4.8.2 e sai --------
+# Roda de proposito a sequencia que ANTES travava o driver (con_mode=4 com
+# wlan0 partindo de DOWN + 'ip link up' + 'iw set channel'), com timeout nos
+# passos arriscados. Com o fix, o pior caso vira erro recuperavel -- se o script
+# chegar ao fim SEM exigir 'reboot -f', a Fase 0-B ja provou seu valor.
+run_selftest() {
+  CONMODE=/sys/module/wlan/parameters/con_mode
+  ERRF=/data/local/tmp/wmon_test.err
+  CH=${CHAN:-6}
+  is_wifi wlan0    || die "wlan0 (radio interno) nao existe."
+  [ -w "$CONMODE" ] || die "$CONMODE ausente: kernel sem o wlan built-in?"
+
+  TMO=$(resolve timeout 2>/dev/null || true)
+  t() { if [ -n "$TMO" ]; then "$TMO" "$@"; else shift; "$@"; fi; }
+
+  echo "wmon: === TESTE monitor interno QCA6390 (fix v4.8.2), canal $CH ==="
+  echo "wmon: isto derruba seu WiFi/STA -- rode LOCAL, nunca por SSH sobre WiFi."
+  echo "wmon: se voltar SEM exigir 'reboot -f', a Fase 0-B pegou."
+
+  restore() {
+    echo "wmon: restaurando (con_mode=0 + WiFi)..."
+    echo 0 > "$CONMODE" 2>/dev/null
+    svc wifi disable 2>/dev/null; svc wifi enable 2>/dev/null
+    echo "wmon: se o WiFi nao voltar, reconecte pelas Configuracoes."
+  }
+  trap restore EXIT INT TERM
+
+  echo "wmon: [1/4] con_mode=4 a partir de wlan0 DOWN..."
+  $IP link set wlan0 down 2>/dev/null
+  echo 4 > "$CONMODE" || die "escrita em con_mode falhou."
+  t 15 $IP link set wlan0 up || echo "wmon:   aviso: 'ip link up' rc=$?"
+  ty=$($IW dev wlan0 info 2>/dev/null | awk '/type/{print $2; exit}')
+  echo "wmon:   wlan0 type=${ty:-?} (esperado: monitor)"
+
+  echo "wmon: [2/4] iw set channel $CH (o passo que travava)..."
+  if t 15 $IW dev wlan0 set channel "$CH" 2>"$ERRF"; then
+    echo "wmon:   OK: canal fixado sem travar"; setok=1
+  else
+    rc=$?; setok=0
+    echo "wmon:   FALHOU rc=$rc"
+    err=$(head -1 "$ERRF" 2>/dev/null | cut -c1-76)
+    [ -n "$err" ] && echo "wmon:   $err"
+    [ "$rc" = 124 ] && echo "wmon:   rc=124=timeout; veja 'dmesg | tail'."
+  fi
+  rm -f "$ERRF"
+
+  n=-1
+  if [ "$setok" = 1 ]; then
+    echo "wmon: [3/4] contando frames por 8s (rx_packets)..."
+    RXP=/sys/class/net/wlan0/statistics/rx_packets
+    b=$(cat "$RXP" 2>/dev/null || echo 0)
+    sleep 8
+    a=$(cat "$RXP" 2>/dev/null || echo 0)
+    n=$((a - b))
+    echo "wmon:   frames RX em 8s: $n"
+  else
+    echo "wmon: [3/4] pulei a captura (canal nao fixou)"
+  fi
+
+  echo "wmon: [4/4] veredito:"
+  if [ "$setok" = 1 ] && [ "$n" -gt 0 ]; then
+    echo "wmon:   >>> FUNCIONOU: captura no canal $CH sem travar."
+  elif [ "$setok" = 1 ]; then
+    echo "wmon:   >>> canal OK, 0 frames: tente o canal do seu AP (-c N)."
+  else
+    echo "wmon:   >>> nao fixou canal: muro de firmware provavel -> use dongle."
+  fi
+  exit 0
+}
+
+[ -n "$TEST" ] && run_selftest
 
 # --- autodeteccao da interface ----------------------------------------------
 if [ -z "$IFACE" ]; then

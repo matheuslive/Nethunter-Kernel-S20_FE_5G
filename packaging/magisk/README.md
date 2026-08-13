@@ -62,6 +62,8 @@ sudo wmon              # autodetecta; dongle=hopping, interno=exige -c
 sudo wmon -c 6         # trava no canal 6
 sudo wmon -i wlan1 -c 36
 sudo wmon -l           # lista as interfaces WiFi
+sudo wmon -t           # TESTE do monitor interno wlan0 (valida o fix v4.8.2)
+sudo wmon -t -c 36     # idem, no canal 36 (default 6)
 sudo wmon -h
 ```
 
@@ -75,3 +77,13 @@ Por isso no interno o `wmon` **obriga um canal fixo** (`-c`) e exige o `wlan0`
 já conectado a um AP (`operstate=up`) antes de entrar em monitor — mas mesmo
 assim é arriscado. **Use um dongle USB** (`usbwifi` carrega o driver → vira
 `wlan1`) para captura confiável com hopping e injection.
+
+A partir da **v4.8.2** o kernel traz correções que atacam esse deadlock
+(early-return de mesmo canal, self-recovery desligado no timeout de vdev monitor
+→ **acaba o hard reboot**, e DBS pulado no monitor). Rode `sudo wmon -t` para
+validar no aparelho: ele executa de propósito a sequência que antes travava
+(`con_mode=4` partindo de `wlan0` DOWN → `ip link up` → `iw set channel`), com
+`timeout` nos passos arriscados, conta os frames capturados em 8 s e restaura o
+WiFi no fim. Veredito: captura no canal fixo funcionou, ou é muro de firmware da
+QCA6390 (aí o dongle segue sendo o caminho). O importante: com o fix, o pior
+caso vira erro recuperável — **não deve mais exigir `reboot -f`**.
