@@ -20,7 +20,7 @@ DEFCONFIG_NAME=wirus_defconfig
 CHIPSET_NAME=kona
 VARIANT=r8q
 ARCH=arm64
-VERSION=NetHunter_matheuslive_${VARIANT}_v4.8
+VERSION=NetHunter_matheuslive_${VARIANT}_v4.8.2
 JOBS=$(nproc)
 
 OUT=$DIR/out
@@ -32,8 +32,8 @@ STAGE=$OUT/moddep
 DTS_DIR=$OUT/arch/$ARCH/boot/dts
 
 # Versao dos modulos Magisk (versionCode tem que ser inteiro).
-MOD_VERSION=v4.8
-MOD_VERSIONCODE=48
+MOD_VERSION=v4.8.2
+MOD_VERSIONCODE=482
 
 # Toolchain versionado no proprio repo. O GCC 4.9 entra so como binutils
 # (as, ld, ar...) via CROSS_COMPILE; quem compila e o clang do REAL_CC.
