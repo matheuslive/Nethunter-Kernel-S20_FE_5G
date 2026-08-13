@@ -70,20 +70,17 @@ sudo wmon -h
 Ao sair (`Ctrl-C`), o `wmon` restaura sozinho: dongle → `managed`; interno →
 `con_mode=0` + religa o WiFi.
 
-⚠️ **No `wlan0` interno (QCA6390) o monitor é frágil.** Trocar de canal
-(`iw set channel`, que é o que o airodump faz ao pular canais) **deadlocka o
-driver qcacld** (D-state), exigindo hard reboot (`echo b > /proc/sysrq-trigger`).
-Por isso no interno o `wmon` **obriga um canal fixo** (`-c`) e exige o `wlan0`
-já conectado a um AP (`operstate=up`) antes de entrar em monitor — mas mesmo
-assim é arriscado. **Use um dongle USB** (`usbwifi` carrega o driver → vira
+⚠️ **No `wlan0` interno (QCA6390) a captura não funciona — muro de firmware.**
+Confirmado no aparelho (`wmon -t`): entra em monitor, mas o firmware **não deixa
+fixar canal** (`iw set channel` → `timeout -110`, não emite o `VDEV_UP`), então
+não há captura útil. **Use um dongle USB** (`usbwifi` carrega o driver → vira
 `wlan1`) para captura confiável com hopping e injection.
 
-A partir da **v4.8.2** o kernel traz correções que atacam esse deadlock
-(early-return de mesmo canal, self-recovery desligado no timeout de vdev monitor
-→ **acaba o hard reboot**, e DBS pulado no monitor). Rode `sudo wmon -t` para
-validar no aparelho: ele executa de propósito a sequência que antes travava
-(`con_mode=4` partindo de `wlan0` DOWN → `ip link up` → `iw set channel`), com
-`timeout` nos passos arriscados, conta os frames capturados em 8 s e restaura o
-WiFi no fim. Veredito: captura no canal fixo funcionou, ou é muro de firmware da
-QCA6390 (aí o dongle segue sendo o caminho). O importante: com o fix, o pior
-caso vira erro recuperável — **não deve mais exigir `reboot -f`**.
+A partir da **v4.8.2** o kernel corrige o *deadlock* que esse cenário causava
+(early-return de mesmo canal, self-recovery desligado no timeout de vdev monitor,
+DBS pulado): o `iw set channel` agora **falha limpo (-110) em vez de travar o
+aparelho** — validado no device, sem mais `reboot -f`. Além disso o `wmon` interno
+agora **parte de `wlan0` DOWN** antes do `con_mode=4`, evitando o vazamento de
+refcount de netdev (`unregister_netdevice: waiting for wlan0 to become free`) que
+travava a troca de modo quando a STA estava ativa. Rode `sudo wmon -t` para ver o
+veredito no seu aparelho.

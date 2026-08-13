@@ -7,11 +7,11 @@
 #   1. wlan1  -> dongle USB externo (ath9k_htc, RTL8812AU, mt7601u, ...). E o
 #               caminho ESTAVEL do NetHunter: monitor + injection, hopping livre,
 #               nao mexe no wlan0 interno. Carregue o driver antes com 'usbwifi'.
-#   2. wlan0  -> radio interno QCA6390 (fallback). Via con_mode=4. FUNCIONA em
-#               parte, mas trocar de canal DEADLOCKA o driver (D-state, exige
-#               hard reboot). Por isso no interno o canal e OBRIGATORIO e fixo
-#               (sem hopping) -- e ainda assim e um tiro no escuro. Prefira o
-#               dongle.
+#   2. wlan0  -> radio interno QCA6390 (fallback). Via con_mode=4. Entra em
+#               monitor, mas o firmware NAO deixa fixar canal (iw set channel
+#               -> timeout -110): captura em geral nao rola. A v4.8.2 fez isso
+#               FALHAR de forma limpa em vez de travar o aparelho. Canal
+#               obrigatorio (-c). Prefira o dongle.
 #
 # Uso:
 #   wmon                 autodetecta a interface; dongle=hop, interno=exige -c
@@ -56,6 +56,11 @@ AIRO=$(resolve airodump-ng) \
 case "$AIRO" in "$TERMUX"*) NEED_TLIB=1 ;; esac
 case "$IW"   in "$TERMUX"*) NEED_TLIB=1 ;; esac
 [ -n "${NEED_TLIB:-}" ] && export LD_LIBRARY_PATH="$TERMUX/lib:${LD_LIBRARY_PATH:-}"
+
+# timeout opcional: envolve passos que PODEM pendurar no driver interno.
+# 't 15 cmd...' roda 'timeout 15 cmd' se houver timeout; senao 'cmd' direto.
+TMO=$(resolve timeout 2>/dev/null || true)
+t() { if [ -n "$TMO" ]; then "$TMO" "$@"; else shift; "$@"; fi; }
 
 is_wifi() {  # $1 = nome da interface; true se ela existe e tem phy80211
   [ -e "/sys/class/net/$1/phy80211" ]
@@ -103,9 +108,6 @@ run_selftest() {
   CH=${CHAN:-6}
   is_wifi wlan0    || die "wlan0 (radio interno) nao existe."
   [ -w "$CONMODE" ] || die "$CONMODE ausente: kernel sem o wlan built-in?"
-
-  TMO=$(resolve timeout 2>/dev/null || true)
-  t() { if [ -n "$TMO" ]; then "$TMO" "$@"; else shift; "$@"; fi; }
 
   echo "wmon: === TESTE monitor interno QCA6390 (fix v4.8.2), canal $CH ==="
   echo "wmon: isto derruba seu WiFi/STA -- rode LOCAL, nunca por SSH sobre WiFi."
@@ -183,20 +185,15 @@ CONMODE=/sys/module/wlan/parameters/con_mode
 if [ "$IFACE" = "wlan0" ]; then
   [ -w "$CONMODE" ] || die "$CONMODE ausente: kernel sem o wlan built-in?"
 
-  # Sem canal fixo o airodump faria hopping -> 'iw set channel' em loop ->
-  # deadlock certo. No interno o canal e obrigatorio.
+  # Sem canal fixo o airodump faria hopping -> 'iw set channel' em loop.
   [ -n "$CHAN" ] || die "no wlan0 interno o canal e OBRIGATORIO (ex.: wmon -c 6).
-       hopping trava o driver. Melhor ainda: use um dongle USB (wlan1)."
+       Melhor: use um dongle USB (wlan1)."
 
-  # con_mode=4 com wlan0 DOWN + 'ip link up' trava o driver. Exige o wlan0 JA
-  # up/conectado a um AP antes de entrar em monitor (registrado em teste).
-  st=$(cat /sys/class/net/wlan0/operstate 2>/dev/null)
-  [ "$st" = "up" ] || die "wlan0 esta '$st', precisa estar 'up' (conecte a um
-       WiFi primeiro; NAO deixe o wmon dar 'ip link up' -- isso deadlocka)."
-
-  echo "wmon: ! wlan0 INTERNO. Trocar de canal pode DEADLOCKAR o driver e"
-  echo "wmon: ! exigir hard reboot (echo b > /proc/sysrq-trigger). Prefira dongle."
-  echo "wmon: monitor GLOBAL vai derrubar seu WiFi/STA agora."
+  echo "wmon: ! wlan0 INTERNO (QCA6390). Confirmado em teste (wmon -t): o"
+  echo "wmon: ! firmware NAO deixa fixar canal em monitor (iw set channel ->"
+  echo "wmon: ! timeout -110), entao a captura no interno em geral NAO rola."
+  echo "wmon: ! A v4.8.2 faz isso FALHAR em vez de travar o aparelho."
+  echo "wmon: ! Prefira o dongle USB. Monitor GLOBAL derruba o WiFi agora."
 
   cleanup_internal() {
     echo ""
@@ -207,13 +204,24 @@ if [ "$IFACE" = "wlan0" ]; then
   }
   trap cleanup_internal EXIT INT TERM
 
-  echo "wmon: entrando em monitor global (con_mode=4)..."
+  # Partir de wlan0 DOWN e o que evita o vazamento de refcount de netdev
+  # ('unregister_netdevice: waiting for wlan0 to become free') que trava a
+  # troca de con_mode quando a STA esta ativa. Foi assim que o 'wmon -t' nao
+  # travou; o antigo "exija wlan0 up" era justamente o gatilho do leak.
+  echo "wmon: [1/3] wlan0 DOWN + con_mode=4 (teardown limpo)..."
+  $IP link set wlan0 down 2>/dev/null
   echo 4 > "$CONMODE" || die "escrita em con_mode falhou."
-  # NAO fazer 'ip link up' aqui: wlan0 ja esta up e o up em monitor trava.
+  t 15 $IP link set wlan0 up || echo "wmon: aviso: 'ip link up' rc=$?"
 
-  echo "wmon: airodump-ng no wlan0, canal $CHAN (sem hopping)"
-  # shellcheck disable=SC2086
-  "$AIRO" -c "$CHAN" $EXTRA wlan0
+  echo "wmon: [2/3] iw set channel $CHAN..."
+  if t 15 $IW dev wlan0 set channel "$CHAN" 2>/dev/null; then
+    echo "wmon: [3/3] canal fixado. airodump-ng no wlan0 canal $CHAN (sem hop)"
+    # shellcheck disable=SC2086
+    "$AIRO" -c "$CHAN" $EXTRA wlan0
+  else
+    echo "wmon: iw set channel falhou (esperado: timeout -110 = muro de"
+    echo "wmon: firmware da QCA6390). Nao rodo o airodump. USE UM DONGLE USB."
+  fi
   exit 0
 fi
 
