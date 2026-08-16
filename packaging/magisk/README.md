@@ -53,14 +53,19 @@ insmod /system/lib/modules/can327.ko
 
 ## Monitor mode + airodump-ng (`wmon`)
 
-Roda **sob demanda** no Termux, como root. Autodetecta a interface: prefere o
-**dongle USB (`wlan1`)** — o caminho estável do NetHunter — e cai no **rádio
-interno `wlan0`** só se não houver dongle.
+Roda **sob demanda** no Termux, como root. Por **padrão usa o dongle USB
+(`wlan1`)** — o caminho estável do NetHunter; **não cai mais no rádio interno**.
+Para forçar o `wlan0` interno (que não captura — muro de firmware) use
+`wmon -i wlan0` de propósito, ou `wmon -t` para o autoteste.
+
+O companion **carrega o `ath9k_htc` (AR9271) no boot** (`service.sh`), então o
+dongle vira `wlan1` sozinho ao plugar, sem precisar rodar `usbwifi`.
 
 ```sh
-sudo wmon              # autodetecta; dongle=hopping, interno=exige -c
+sudo wmon              # usa o dongle wlan1 (hopping)
 sudo wmon -c 6         # trava no canal 6
 sudo wmon -i wlan1 -c 36
+sudo wmon -i wlan0 -c 6   # forca o radio interno (nao captura)
 sudo wmon -l           # lista as interfaces WiFi
 sudo wmon -t           # TESTE do monitor interno wlan0 (valida o fix v4.8.2)
 sudo wmon -t -c 36     # idem, no canal 36 (default 6)

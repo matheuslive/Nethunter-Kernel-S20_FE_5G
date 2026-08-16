@@ -40,7 +40,9 @@ ui_print "- Drivers de dongle WiFi vem como .ko (nao mais built-in),"
 ui_print "  com $FWCOUNT firmwares para /vendor/firmware:"
 ui_print "    usbwifi        carrega o driver do dongle plugado"
 ui_print "    usbwifi -l     lista os drivers disponiveis"
-ui_print "    wmon           monitor + airodump-ng (dongle wlan1, senao wlan0)"
+ui_print "    wmon           monitor + airodump-ng (usa o dongle wlan1)"
+ui_print "  O ath9k_htc (AR9271) e carregado no boot (service.sh): o dongle"
+ui_print "  vira wlan1 sozinho ao plugar, sem rodar usbwifi."
 
 # --- uso imediato, sem reboot ------------------------------------------------
 #

@@ -3,21 +3,22 @@
 #
 # Roda SOB DEMANDA, como root (sudo/su), no proprio aparelho (Termux).
 #
-# Escolha da interface (autodetecta, nesta ordem):
-#   1. wlan1  -> dongle USB externo (ath9k_htc, RTL8812AU, mt7601u, ...). E o
-#               caminho ESTAVEL do NetHunter: monitor + injection, hopping livre,
-#               nao mexe no wlan0 interno. Carregue o driver antes com 'usbwifi'.
-#   2. wlan0  -> radio interno QCA6390 (fallback). Via con_mode=4. Entra em
-#               monitor, mas o firmware NAO deixa fixar canal (iw set channel
-#               -> timeout -110): captura em geral nao rola. A v4.8.2 fez isso
-#               FALHAR de forma limpa em vez de travar o aparelho. Canal
-#               obrigatorio (-c). Prefira o dongle.
+# Escolha da interface:
+#   PADRAO -> wlan1 (dongle USB externo: ath9k_htc/AR9271, RTL8812AU, mt7601u...).
+#             Caminho ESTAVEL do NetHunter: monitor + injection, hopping livre. O
+#             companion carrega o ath9k_htc no boot, entao o AR9271 vira wlan1
+#             sozinho ao plugar; outros chips: rode 'usbwifi' antes.
+#   wlan0  -> radio interno QCA6390, SO com '-i wlan0' ou '-t' (NAO e mais
+#             fallback automatico). Entra em monitor mas o firmware nao deixa
+#             fixar canal (iw set channel -> timeout -110): captura nao rola
+#             (muro de firmware). A v4.8.2 faz isso falhar limpo, sem travar.
 #
 # Uso:
-#   wmon                 autodetecta a interface; dongle=hop, interno=exige -c
+#   wmon                 usa o dongle wlan1 (default; NAO cai no interno)
 #   wmon -c 6            trava no canal 6
 #   wmon -i wlan1        forca a interface
 #   wmon -i wlan1 -c 36  interface + canal
+#   wmon -i wlan0 -c 6   forca o radio interno (nao captura -- muro de firmware)
 #   wmon -- --band a     tudo apos '--' vai direto pro airodump-ng
 #   wmon -l              lista as interfaces WiFi vistas e sai
 #   wmon -t              TESTE do monitor interno wlan0 (valida o fix v4.8.2)
@@ -170,10 +171,11 @@ run_selftest() {
 if [ -z "$IFACE" ]; then
   if is_wifi wlan1; then
     IFACE=wlan1
-  elif is_wifi wlan0; then
-    IFACE=wlan0
   else
-    die "nenhuma interface WiFi (wlan1/wlan0). Dongle plugado? tente 'usbwifi'."
+    die "wlan1 (dongle USB) nao encontrado. Plugue o dongle -- o companion ja
+       carrega o ath9k_htc no boot, entao o AR9271 vira wlan1 sozinho; outros
+       chips: rode 'usbwifi'. Para o radio interno wlan0 (NAO captura, muro de
+       firmware) use de proposito: wmon -i wlan0 -c <canal>."
   fi
 fi
 is_wifi "$IFACE" || die "interface '$IFACE' nao existe ou nao e WiFi."
