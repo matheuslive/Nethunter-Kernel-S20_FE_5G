@@ -383,11 +383,14 @@ cmd_show() {
 cmd_watchdog() {
 	iv=$(conf_get WATCHDOG_SEC)
 	case "$iv" in ''|0|*[!0-9]*) exit 0 ;; esac
-	want=$(conf_get FULL_CAPACITY)
-	[ -n "$want" ] && [ "$want" != 0 ] || exit 0
-	log "watchdog ligado (FULL_CAPACITY=$want, a cada ${iv}s)"
+	log "watchdog ligado (a cada ${iv}s)"
 	while :; do
 		sleep "$iv"
+		# Rele a config a cada volta: um "limit"/"set" feito com o watchdog ja
+		# rodando tem que valer, senao ele devolveria o limite antigo (e um
+		# "limit off" seria desfeito). Sem limite configurado, nao ha o que vigiar.
+		want=$(conf_get FULL_CAPACITY)
+		[ -n "$want" ] && [ "$want" != 0 ] || continue
 		now=$(rd batt_full_capacity)
 		[ "$now" = "$want" ] && continue
 		# O app "Proteger bateria" da One UI escreve neste mesmo atributo; se
