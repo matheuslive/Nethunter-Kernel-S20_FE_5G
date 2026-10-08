@@ -1,5 +1,10 @@
 # NetHunter Battery (r8q) — módulo Magisk
 
+> **Legado (2026-10-08).** Substituído no S20 pelo módulo `mod_companion` do projeto
+> `~/Android/mod` (app `com.matheus.mod`), que carrega este `battctl` no payload
+> (`app-android/app/src/main/assets/companion/payload/`). Mudança nova entra lá;
+> este diretório só recebe porte de volta, se ainda fizer sentido.
+
 Tuning de carga do Galaxy S20 FE 5G pelo sysfs do driver `sec_battery`
 (`/sys/class/power_supply/battery/`), **system-less** e reversível.
 
