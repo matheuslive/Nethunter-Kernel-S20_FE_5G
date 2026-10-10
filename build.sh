@@ -133,18 +133,23 @@ cp -a "$DIR/packaging/magisk" "$MAG"
 rm -f "$MAG/overlay.d/sbin/.gitkeep"
 sed -i -e "s/@VERSION@/$MOD_VERSION/" -e "s/@VERSIONCODE@/$MOD_VERSIONCODE/" "$MAG/module.prop"
 
-# .ko via magic mount + indices do depmod.
+# .ko + indices do depmod, FORA da arvore system/ (em $MAG/modules/).
 #
 # Os drivers de dongle WiFi sao =m (built-in eles custavam ~7 MB de kernel
 # residente mesmo sem dongle nenhum plugado). Quem carrega e o helper
-# system/bin/usbwifi, que chama "modprobe -d /system/lib/modules": o modprobe
-# do toolbox do Android le modules.dep/modules.alias do diretorio passado no -d.
+# system/bin/usbwifi, que chama "modprobe -d <dir>": o modprobe do toolbox do
+# Android le modules.dep/modules.alias do diretorio passado no -d -- e esse dir
+# NAO precisa estar em /system. Deixar os .ko fora de system/ e deliberado:
+# injeta-los em /system/lib/modules forcava o magic mount do Magisk a clonar
+# /system/lib inteiro (~760 bind-mounts dos .so irmaos, replicados por mount
+# namespace -> ~34 MB de slab nao-recuperavel no S20). Em $MAG/modules/ eles
+# nao sao montados em lugar nenhum; o usbwifi os acha via /data/adb.
 #
 # O depmod exige a arvore <base>/lib/modules/<release>/, entao montamos uma
 # staging e levamos so os indices para o diretorio flat do companion.
-mkdir -p "$MAG/system/lib/modules"
+mkdir -p "$MAG/modules"
 if [ ${#MODULES[@]} -gt 0 ]; then
-	cp -f "${MODULES[@]}" "$MAG/system/lib/modules/"
+	cp -f "${MODULES[@]}" "$MAG/modules/"
 
 	KREL=$(cat "$OUT/include/config/kernel.release")
 	rm -rf "$STAGE"
@@ -160,28 +165,29 @@ if [ ${#MODULES[@]} -gt 0 ]; then
 	cp -f "$STAGE/lib/modules/$KREL"/modules.dep \
 	      "$STAGE/lib/modules/$KREL"/modules.alias \
 	      "$STAGE/lib/modules/$KREL"/modules.symbols \
-	      "$MAG/system/lib/modules/"
+	      "$MAG/modules/"
 fi
 
-# Firmware dos dongles -> /vendor/firmware (magic mount).
+# Firmware dos dongles -> /system/etc/firmware (magic mount).
 #
 # O kernel so procura em /lib/firmware*, que nem existe no Android; quem salva
 # e o fallback do user helper (CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y): o
-# kernel emite uevent e o ueventd procura nos firmware_directories dele
-# (/etc/firmware/ /odm/firmware/ /vendor/firmware/ /firmware/image/). Nenhum
-# dos drivers de dongle usa request_firmware_direct(), que puraria esse
-# caminho, entao /vendor/firmware serve. NAO mexer em firmware_class.path: ele
-# aponta para /vendor/firmware_mnt/image e outros subsistemas dependem disso.
+# kernel emite uevent e o ueventd procura nos firmware_directories dele. O
+# S20 define duas listas (combinadas pelo init): /vendor/ueventd.rc traz
+# /vendor/firmware_mnt/image/ e /vendor/firmware-modem/image/; /system/etc/
+# ueventd.rc traz /etc/firmware/ /odm/firmware/ /vendor/firmware/ /firmware/
+# image/. Nenhum driver de dongle usa request_firmware_direct(), entao o
+# fallback serve. NAO mexer em firmware_class.path: aponta para
+# /vendor/firmware_mnt/image e outros subsistemas dependem disso.
 #
-# Fica em $MODPATH/system/vendor/ mesmo, apesar de /system/vendor ser um
-# symlink para /vendor: o Magisk resolve isso sozinho (monta tmpfs em
-# /vendor/firmware, faz bind dos 57 arquivos originais e acrescenta os nossos).
-# Confirmado no device em 2026-08-08 -- /vendor/firmware/ath9k_htc/ tem os dois
-# .fw do pacote. Nao trocar por $MODPATH/vendor/ "por seguranca": esse caminho
-# nao esta validado aqui, e o que esta no ar funciona.
-mkdir -p "$MAG/system/vendor/firmware"
-cp -a "$DIR/packaging/firmware/." "$MAG/system/vendor/firmware/"
-rm -f "$MAG/system/vendor/firmware/README.md"   # doc do repo, nao vai pro device
+# Escolhemos /etc/firmware/ (= /system/etc/firmware, pois /etc e symlink para
+# /system/etc) em vez de /vendor/firmware/: injetar em /vendor forcava o magic
+# mount a clonar /vendor inteiro (~142 bind-mounts/namespace). /system/etc ja e
+# clonado por outros modulos (hosts, viper, ...), entao acrescentar firmware la
+# e marginal. Economia medida no S20: ~6 MB de slab a menos.
+mkdir -p "$MAG/system/etc/firmware"
+cp -a "$DIR/packaging/firmware/." "$MAG/system/etc/firmware/"
+rm -f "$MAG/system/etc/firmware/README.md"   # doc do repo, nao vai pro device
 
 # Avisa se algum modulo declara firmware que nao esta empacotado -- sem isto,
 # habilitar um driver novo faria o firmware sumir em silencio. Os ausentes ja
@@ -200,7 +206,7 @@ if command -v /sbin/modinfo >/dev/null 2>&1; then
 	for ko in "${MODULES[@]}"; do
 		/sbin/modinfo -F firmware "$ko" 2>/dev/null
 	done | sort -u | while read -r fw; do
-		[ -f "$MAG/system/vendor/firmware/$fw" ] && continue
+		[ -f "$MAG/system/etc/firmware/$fw" ] && continue
 		case " ${FW_KNOWN_MISSING[*]} " in *" $fw "*) continue ;; esac
 		echo "!! firmware declarado e ausente: $fw" >&2
 	done

@@ -1,15 +1,17 @@
 # Firmware dos dongles USB
 
-Vai para `/vendor/firmware/` no device, por magic mount do modulo Magisk
-companion (`system/vendor/firmware/` dentro do zip).
+Vai para `/etc/firmware/` (= `/system/etc/firmware/`, pois `/etc` e symlink para
+`/system/etc`) no device, por magic mount do modulo Magisk companion
+(`system/etc/firmware/` dentro do zip).
 
-## Por que /vendor/firmware e nao /lib/firmware
+## Por que /etc/firmware e nao /lib/firmware nem /vendor/firmware
 
 O `fw_path[]` do kernel (`drivers/base/firmware_loader/main.c`) so lista
 `/lib/firmware*` e o valor de `firmware_class.path`. No Android **nao existe
 `/lib`**, entao nenhum desses caminhos resolve. O que funciona e o fallback de
 userspace (`CONFIG_FW_LOADER_USER_HELPER_FALLBACK=y`): o kernel emite um uevent
-e o `ueventd` procura nos diretorios do `ueventd.rc` do device --
+e o `ueventd` procura nos diretorios combinados dos `ueventd.rc` do device. No
+r8q o `/system/etc/ueventd.rc` traz --
 
     firmware_directories /etc/firmware/ /odm/firmware/ /vendor/firmware/ /firmware/image/
 
@@ -17,6 +19,13 @@ Isso so vale porque **nenhum** dos drivers de dongle usa
 `request_firmware_direct()` (essa variante pula o user helper). Conferido em
 ath9k_htc, mt7601u, rt2x00, zd1211rw, rtlwifi, rtl8xxxu e carl9170: todos usam
 `request_firmware()` ou `request_firmware_nowait()`.
+
+**`/etc/firmware/` em vez de `/vendor/firmware/`** (ambos na lista acima) para
+economizar RAM: injetar em `/vendor` forcava o magic mount do Magisk a clonar
+`/vendor` inteiro (~142 bind-mounts por mount namespace, ~6 MB de slab no S20),
+enquanto `/system/etc` ja e clonado por outros modulos, entao acrescentar
+firmware la e marginal. O arquivo leva o contexto SELinux `vendor_firmware_file`
+(o `customize.sh` seta), que e o que o `ueventd` consegue ler.
 
 **Nao setar `firmware_class.path`.** No r8q ele ja vem apontando para
 `/vendor/firmware_mnt/image` e outros subsistemas dependem disso.

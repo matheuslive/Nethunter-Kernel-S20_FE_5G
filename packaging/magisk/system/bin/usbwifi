@@ -18,13 +18,17 @@ case "${1:-}" in
   -h|--help) sed -n '2,12p' "$0" | sed 's/^# \{0,1\}//'; exit 0 ;;
 esac
 
-# Onde estao os .ko. Depois do reboot e o /system/lib/modules do magic mount,
-# mas ate o primeiro boot depois da instalacao esse mount ainda nao existe (ou
-# pior: existe com os .ko da instalacao ANTERIOR). Por isso o diretorio do
-# proprio modulo em /data/adb vem primeiro -- modules_update/ e onde o Magisk
-# poe a instalacao pendente, modules/ e a ativa.
+# Onde estao os .ko. Ficam FORA da arvore system/ do modulo (em
+# $MODID/modules/), de proposito: injetar .ko em /system/lib/modules forcava o
+# magic mount a clonar /system/lib inteiro (~760 bind-mounts dos .so irmaos,
+# replicados por namespace -> ~34 MB de slab). Fora de system/ eles nao sao
+# montados e o modprobe -d os le direto do /data/adb. modules_update/ e onde o
+# Magisk poe a instalacao pendente, modules/ a ativa; as duas entradas em
+# system/lib/modules sao fallback para pacotes antigos com o layout antigo.
 MODID=nethunter_companion_r8q
-for d in "/data/adb/modules_update/$MODID/system/lib/modules" \
+for d in "/data/adb/modules_update/$MODID/modules" \
+         "/data/adb/modules/$MODID/modules" \
+         "/data/adb/modules_update/$MODID/system/lib/modules" \
          "/data/adb/modules/$MODID/system/lib/modules" \
          /system/lib/modules; do
 	[ -f "$d/modules.alias" ] || continue
@@ -51,7 +55,7 @@ load() {
 	echo "usbwifi: $1 carregado"
 	echo "usbwifi: interfaces agora: $(ls /sys/class/net | tr '\n' ' ')"
 	echo "usbwifi: se o driver reclamar de firmware faltando no dmesg, o .bin"
-	echo "         precisa estar em /vendor/firmware ou /lib/firmware."
+	echo "         precisa estar em /system/etc/firmware ou /vendor/firmware."
 }
 
 # Modulo dado na linha de comando.

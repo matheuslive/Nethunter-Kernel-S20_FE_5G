@@ -35,9 +35,9 @@ for bin in hid-keyboard usbwifi wmon; do
   [ -f "$MODPATH/system/bin/$bin" ] && set_perm "$MODPATH/system/bin/$bin" 0 0 0755
 done
 
-FWCOUNT=$(find "$MODPATH/system/vendor/firmware" -type f 2>/dev/null | wc -l)
+FWCOUNT=$(find "$MODPATH/system/etc/firmware" -type f 2>/dev/null | wc -l)
 ui_print "- Drivers de dongle WiFi vem como .ko (nao mais built-in),"
-ui_print "  com $FWCOUNT firmwares para /vendor/firmware:"
+ui_print "  com $FWCOUNT firmwares para /etc/firmware:"
 ui_print "    usbwifi        carrega o driver do dongle plugado"
 ui_print "    usbwifi -l     lista os drivers disponiveis"
 ui_print "    wmon           monitor + airodump-ng (usa o dongle wlan1)"
@@ -53,13 +53,12 @@ ui_print "  vira wlan1 sozinho ao plugar, sem rodar usbwifi."
 #               reboot -- exatamente quando o magic mount assume o /system/bin.
 #  .ko       -> nada a fazer: o usbwifi procura os modulos tambem no diretorio
 #               do modulo em /data/adb (ver o proprio usbwifi).
-#  firmware  -> overlayfs sobre /vendor/firmware, e SO se os arquivos ainda nao
-#               estiverem la. NAO usar "mount --bind": ele ESCONDERIA os 57
-#               firmwares do aparelho (wifi interno, bluetooth, GPU) ate o
-#               reboot; o overlay soma (lowerdir mantem os originais).
-#               Nao adianta testar com "mountpoint": /vendor/firmware ja e um
-#               tmpfs do Magisk desde o boot. O teste util e procurar um
-#               arquivo nosso la dentro.
+#  firmware  -> SO no reboot. Antes o pacote montava um overlay sobre
+#               /vendor/firmware para valer na hora; agora o firmware vai para
+#               /etc/firmware (= /system/etc/firmware), que nao existe no stock,
+#               entao nao ha o que sobrepor sem reboot. O magic mount cria o
+#               diretorio no boot. So precisamos deixar o contexto SELinux certo
+#               no $MODPATH para o ueventd conseguir ler depois do reboot.
 ui_print "- Publicando sem reboot:"
 
 for bin in hid-keyboard usbwifi wmon; do
@@ -72,26 +71,11 @@ for bin in hid-keyboard usbwifi wmon; do
   fi
 done
 
-FWSRC=$MODPATH/system/vendor/firmware
-WORK=/data/adb/.nethunter-fw-work
-SAMPLE=$(cd "$FWSRC" 2>/dev/null && find . -type f | head -1 | sed 's#^\./##')
-if [ -z "$SAMPLE" ]; then
-  :
-elif [ -e "/vendor/firmware/$SAMPLE" ]; then
-  ui_print "    $FWCOUNT firmwares ja estao em /vendor/firmware"
-else
-  rm -rf "$WORK"; mkdir -p "$WORK"
-  # Mesmo contexto SELinux do diretorio original, senao o ueventd nao le.
-  chcon -R u:object_r:vendor_firmware_file:s0 "$FWSRC" 2>/dev/null
-  if mount -t overlay overlay \
-       -o "lowerdir=/vendor/firmware,upperdir=$FWSRC,workdir=$WORK" \
-       /vendor/firmware 2>/dev/null; then
-    ui_print "    $FWCOUNT firmwares em /vendor/firmware (overlay, ate o reboot)"
-  else
-    rm -rf "$WORK"
-    ui_print "  ! overlay do firmware falhou; dongle que precisa de firmware"
-    ui_print "    so funciona depois do reboot"
-  fi
-fi
+# O ueventd so le o firmware do fallback se o contexto for vendor_firmware_file
+# (o mesmo de /vendor/firmware, que e por onde isto foi validado). O magic mount
+# preserva o label do arquivo no $MODPATH, entao basta rotular aqui.
+FWSRC=$MODPATH/system/etc/firmware
+[ -d "$FWSRC" ] && chcon -R u:object_r:vendor_firmware_file:s0 "$FWSRC" 2>/dev/null
+ui_print "    firmware ($FWCOUNT) so em /etc/firmware apos o reboot"
 
 ui_print "- Instalado. O reboot troca estes atalhos pelo magic mount."

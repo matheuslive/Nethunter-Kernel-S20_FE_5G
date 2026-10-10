@@ -9,21 +9,33 @@ additions" do `anykernel.sh` original tentavam fazer escrevendo em `/system` e
 
 | O quê | Onde no device | Como |
 |---|---|---|
-| Módulos `.ko` do kernel | `/system/lib/modules/` | magic mount |
+| Módulos `.ko` do kernel | `$MODPATH/modules/` (fora de `system/`) | `modprobe -d` via `usbwifi` |
 | `hid-keyboard`, `usbwifi`, `wmon` | `/system/bin/` | magic mount |
 | Descriptors HID (`*.bin`) | `/system/etc/nethunter/` | magic mount |
-| Firmware dos dongles | `/vendor/firmware/` | magic mount (`system/vendor/`) |
+| Firmware dos dongles | `/etc/firmware/` (= `/system/etc/firmware/`) | magic mount (`system/etc/firmware/`) |
 | `init.nethunter.rc` | importado no boot | `overlay.d/sbin/` |
 
 ⚠️ **Binário vai em `system/bin`, nunca em `system/xbin`** — o Magisk 30700 não
 monta `xbin` (o diretório nem existe em One UI 13) e o arquivo some em silêncio.
 Foi o que quebrou o `hid-keyboard` e o `usbwifi` até 2026-08-08.
 
-O firmware, esse, continua em `$MODPATH/system/vendor/` mesmo com
-`/system/vendor` sendo symlink para `/vendor`: o Magisk resolve sozinho (monta
-tmpfs em `/vendor/firmware` e faz bind dos originais). Conferir pelo caminho
-real do arquivo — `/vendor/firmware/ath9k_htc/htc_9271-1.4.0.fw`, não
-`htc_9271.fw` — senão parece ausente quando está lá.
+**Os `.ko` ficam FORA da árvore `system/` do módulo, em `$MODPATH/modules/`**, de
+propósito: injetá-los em `/system/lib/modules` forçava o magic mount a clonar
+`/system/lib` inteiro (bind-mount dos ~760 `.so` irmãos, **replicado por cada
+mount namespace**), o que no S20 custava ~34 MB de slab não-recuperável. Fora de
+`system/` eles não são montados em lugar nenhum; o `usbwifi` os carrega com
+`modprobe -d` lendo direto de `/data/adb`. O `service.sh` chama o `usbwifi`, que
+resolve esse diretório.
+
+O **firmware** foi de `/vendor/firmware/` para **`/etc/firmware/`** (=
+`/system/etc/firmware`, pois `/etc` é symlink para `/system/etc`) pela mesma
+razão: injetar em `/vendor` clonava `/vendor` inteiro (~142 mounts/namespace,
+~6 MB), enquanto `/system/etc` já é clonado por outros módulos (`hosts`,
+`viper`, ...), então acrescentar lá é marginal. Os dois caminhos estão na lista
+`firmware_directories` do `ueventd` do r8q, então o fallback do firmware loader
+acha em qualquer um. O arquivo recebe o contexto SELinux `vendor_firmware_file`
+(é o que o `ueventd` consegue ler). Conferir pelo caminho real —
+`/system/etc/firmware/ath9k_htc/htc_9271-1.4.0.fw`, não `htc_9271.fw`.
 
 ## O que é sólido e o que é experimental
 
@@ -46,9 +58,14 @@ módulos passam a valer depois de flashar o kernel.
 
 ```sh
 su
-insmod /system/lib/modules/can-isotp.ko
-insmod /system/lib/modules/can327.ko
-# etc.
+# Preferir o usbwifi (resolve deps via modprobe -d):
+usbwifi -l            # lista os .ko disponiveis
+usbwifi ath9k_htc     # carrega um pelo nome (+ deps)
+
+# Ou insmod direto, agora que os .ko ficam fora de system/:
+MODS=/data/adb/modules/nethunter_companion_r8q/modules
+insmod $MODS/can-isotp.ko
+insmod $MODS/can327.ko
 ```
 
 ## Monitor mode + airodump-ng (`wmon`)
