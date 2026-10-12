@@ -237,10 +237,12 @@ sed -i -e "s/@VERSION@/$MOD_VERSION/" -e "s/@VERSIONCODE@/$MOD_VERSIONCODE/" "$B
 rm -f "$DIST/nethunter-battery-$VARIANT.zip"
 (cd "$BAT" && zip -qr9 "$DIST/nethunter-battery-$VARIANT.zip" ./*)
 
+# O de bateria fica so em build/<variant>/: e legado desde 2026-10-08 (o
+# mod_companion do app Mod o substituiu), e flashar o zip da raiz/SD traria de
+# volta o modulo antigo ao lado do novo. Por estar no PRUNE, sai da raiz e do SD.
 ZIPS=(
 	"$DIST/$VERSION.zip"
 	"$DIST/nethunter-companion-$VARIANT.zip"
-	"$DIST/nethunter-battery-$VARIANT.zip"
 )
 
 # --- 4. Publica os zips: raiz do repo (symlink) e SD externo do S20 ----------
