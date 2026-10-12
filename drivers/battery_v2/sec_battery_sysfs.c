@@ -252,6 +252,15 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(pd_disable),
 	SEC_BATTERY_ATTR(batt_full_capacity),
 	SEC_BATTERY_ATTR(lrp),
+	SEC_BATTERY_ATTR(batt_max_charge_current),
+#if defined(CONFIG_DIRECT_CHARGING)
+	SEC_BATTERY_ATTR(batt_dchg_high_batt_temp),
+	SEC_BATTERY_ATTR(batt_dchg_high_batt_temp_rec),
+	SEC_BATTERY_ATTR(batt_dchg_high_temp),
+	SEC_BATTERY_ATTR(batt_dchg_high_temp_rec),
+	SEC_BATTERY_ATTR(batt_dchg_limit_current),
+	SEC_BATTERY_ATTR(batt_dchg_limit_state),
+#endif
 };
 
 void update_external_temp_table(struct sec_battery_info *battery, int temp[])
@@ -1901,6 +1910,43 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 	case LRP:
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->lrp);
 		break;
+	case BATT_MAX_CHARGE_CURRENT:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%u\n",
+			battery->user_max_charging_current);
+		break;
+#if defined(CONFIG_DIRECT_CHARGING)
+	/* Os limites termicos do direct charging sao vetores por tipo de
+	 * carregador (indice "pt" do sec_bat_check_direct_chg_temp: bit 1 =
+	 * 25 W, bit 0 = LPM). Mostramos o slot do 25 W, o unico armado no r8q
+	 * (os outros vem com 1000 = 100 C, ou seja, desligados).
+	 */
+	case BATT_DCHG_HIGH_BATT_TEMP:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			battery->pdata->dchg_high_batt_temp[DCHG_PT_25W]);
+		break;
+	case BATT_DCHG_HIGH_BATT_TEMP_REC:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			battery->pdata->dchg_high_batt_temp_recovery[DCHG_PT_25W]);
+		break;
+	case BATT_DCHG_HIGH_TEMP:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			battery->pdata->dchg_high_temp[DCHG_PT_25W]);
+		break;
+	case BATT_DCHG_HIGH_TEMP_REC:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
+			battery->pdata->dchg_high_temp_recovery[DCHG_PT_25W]);
+		break;
+	case BATT_DCHG_LIMIT_CURRENT:
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%u\n",
+			battery->pdata->dchg_charging_limit_current);
+		break;
+	case BATT_DCHG_LIMIT_STATE:
+		/* 1 = o limite termico (do direct charging ou do charger) esta
+		 * segurando a corrente agora. O batt_current_event nao tem esse bit.
+		 */
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%u\n", battery->chg_limit);
+		break;
+#endif
 	default:
 		i = -EINVAL;
 		break;
@@ -3844,6 +3890,78 @@ ssize_t sec_bat_store_attrs(
 			ret = count;
 		}
 		break;
+	case BATT_MAX_CHARGE_CURRENT:
+		/* Teto de corrente de carga, aplicado depois do SIOP no
+		 * sec_bat_set_charging_current(): limita sem mexer no siop_level,
+		 * sem desligar o PD e sem tirar o step charging (os degraus seguem
+		 * valendo abaixo do teto). 0 desliga. O piso de 1000 mA e o do
+		 * direct charging: a entrada e a metade da carga, e o PCA9468 nao
+		 * regula abaixo de 500 mA. Ao contrario do resto deste sysfs, valor
+		 * invalido e recusado com -EINVAL.
+		 */
+		if (sscanf(buf, "%10d\n", &x) != 1 || (x != 0 && (x < 1000 || x > 6000)))
+			return -EINVAL;
+		battery->user_max_charging_current = x;
+		dev_info(battery->dev, "%s: BATT_MAX_CHARGE_CURRENT(%d)\n", __func__, x);
+		sec_bat_refresh_charging_current(battery);
+		ret = count;
+		break;
+#if defined(CONFIG_DIRECT_CHARGING)
+	/* Limite termico do direct charging (25 W): dispara quando a bateria
+	 * passa de HIGH_BATT_TEMP ou o chip passa de HIGH_TEMP, e so libera
+	 * com os dois abaixo das recuperacoes. Em decimos de grau. Mexe so no
+	 * slot do 25 W, o unico armado no r8q; o gatilho tem que ficar acima
+	 * da recuperacao, senao o limite liga e desliga a cada leitura.
+	 */
+	case BATT_DCHG_HIGH_BATT_TEMP:
+	case BATT_DCHG_HIGH_BATT_TEMP_REC:
+	case BATT_DCHG_HIGH_TEMP:
+	case BATT_DCHG_HIGH_TEMP_REC:
+		if (sscanf(buf, "%10d\n", &x) != 1 || x < 200 || x > 900)
+			return -EINVAL;
+		{
+			int *trig, *rec;
+			bool is_trig;
+
+			if (offset == BATT_DCHG_HIGH_BATT_TEMP || offset == BATT_DCHG_HIGH_BATT_TEMP_REC) {
+				trig = battery->pdata->dchg_high_batt_temp;
+				rec = battery->pdata->dchg_high_batt_temp_recovery;
+			} else {
+				trig = battery->pdata->dchg_high_temp;
+				rec = battery->pdata->dchg_high_temp_recovery;
+			}
+			is_trig = (offset == BATT_DCHG_HIGH_BATT_TEMP || offset == BATT_DCHG_HIGH_TEMP);
+			if (is_trig ? x <= rec[DCHG_PT_25W] : x >= trig[DCHG_PT_25W])
+				return -EINVAL;
+			if (is_trig) {
+				trig[DCHG_PT_25W] = x;
+				trig[DCHG_PT_25W | DCHG_PT_LPM] = x;
+			} else {
+				rec[DCHG_PT_25W] = x;
+				rec[DCHG_PT_25W | DCHG_PT_LPM] = x;
+			}
+			dev_info(battery->dev, "%s: dchg %s %s(%d)\n", __func__,
+				(trig == battery->pdata->dchg_high_batt_temp) ? "batt" : "ic",
+				is_trig ? "trig" : "rec", x);
+		}
+		sec_bat_refresh_charging_current(battery);
+		ret = count;
+		break;
+	case BATT_DCHG_LIMIT_CURRENT:
+		/* Corrente de carga durante o limite termico; a de entrada e a
+		 * metade (2:1 do direct charging). Mesmo piso do teto acima.
+		 */
+		if (sscanf(buf, "%10d\n", &x) != 1 || x < 1000 || x > 6000)
+			return -EINVAL;
+		battery->pdata->dchg_charging_limit_current = x;
+		battery->pdata->dchg_input_limit_current = x / 2;
+		dev_info(battery->dev, "%s: dchg limit cc(%d) icl(%d)\n", __func__, x, x / 2);
+		sec_bat_refresh_charging_current(battery);
+		ret = count;
+		break;
+	case BATT_DCHG_LIMIT_STATE:
+		break;
+#endif
 	default:
 		ret = -EINVAL;
 		break;

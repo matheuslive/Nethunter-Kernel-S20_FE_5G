@@ -433,6 +433,11 @@ struct sec_battery_info {
 
 	/* chg temperature check */
 	unsigned int chg_limit;
+	/* Teto de corrente de carga do usuario (batt_max_charge_current), em mA;
+	 * 0 = sem teto. Vale para qualquer carregador, inclusive o direct
+	 * charging, que deriva a corrente de entrada como a metade desta.
+	 */
+	unsigned int user_max_charging_current;
 	unsigned int chg_limit_recovery_cable;
 	unsigned int vbus_chg_by_siop;
 	unsigned int vbus_chg_by_full;
@@ -788,6 +793,11 @@ extern void sec_bat_set_current_event(struct sec_battery_info *battery, unsigned
 extern void sec_bat_set_temp_control_test(struct sec_battery_info *battery, bool temp_enable);
 extern void sec_bat_get_battery_info(struct sec_battery_info *battery);
 extern int sec_bat_set_charge(struct sec_battery_info *battery, int chg_mode);
+/* Indice "pt" dos vetores dchg_high_* do device tree, como o
+ * sec_bat_check_lpm_power() o monta: bit 1 = carregador de 25 W, bit 0 = LPM.
+ */
+#define DCHG_PT_LPM	0x01
+#define DCHG_PT_25W	0x02
 extern int sec_bat_set_charging_current(struct sec_battery_info *battery);
 extern void sec_bat_refresh_charging_current(struct sec_battery_info *battery);
 extern void sec_bat_aging_check(struct sec_battery_info *battery);

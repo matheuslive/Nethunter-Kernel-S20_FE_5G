@@ -1199,6 +1199,12 @@ void sec_bat_set_dchg_current(struct sec_battery_info *battery, int power_type, 
 		*input_current = temp_ic;
 		*charging_current = temp_cc;
 	}
+	/* Um limite nunca sobe a corrente: com o batt_dchg_limit_current acima
+	 * do degrau atual do step charging, o bloco acima ainda deixaria a
+	 * corrente de carga do limite passar (ele so compara a de entrada).
+	 */
+	if (*charging_current > temp_cc)
+		*charging_current = temp_cc;
 }
 #endif
 
@@ -1778,6 +1784,14 @@ int sec_bat_set_charging_current(struct sec_battery_info *battery)
 		sec_bat_get_charging_current_by_siop(battery, &input_current, &charging_current);
 		sec_bat_check_lrp_temp(battery, battery->cable_type, battery->wire_status,
 			battery->siop_level, battery->lcd_status, &input_current, &charging_current);
+
+		/* Teto do usuario (batt_max_charge_current), depois do SIOP e dos
+		 * limites termicos: so baixa, nunca sobe. No direct charging a
+		 * entrada sai da metade desta corrente, no sec_direct_charger.
+		 */
+		if (battery->user_max_charging_current &&
+			charging_current > battery->user_max_charging_current)
+			charging_current = battery->user_max_charging_current;
 
 #if defined(CONFIG_ISDB_CHARGING_CONTROL)
 		/* set input current as siop input limit with ISDB */
