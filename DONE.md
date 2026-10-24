@@ -125,3 +125,6 @@ Conferido no S20 com a v4.10 (uptime de 8 h 27 min, sem `usbwifi` à mão): `lsm
 
 ### `2026-10-24` Flash com o Android ligado: `tools/flash-booted.sh`
 O script refaz por `magiskboot`, sobre o boot atual, o que o AnyKernel faria no recovery: split do zImage, hexpatch `skip_initramfs`→`want_initramfs`, troca só do kernel (ramdisk, cmdline, dtb e kernel_dtb ficam os atuais), backup em `build/r8q/boot-<versão>-<data>.img`, gravação só se a partição não mudou desde o backup e md5 relido. Sem `--write` só prepara. Estreou na v4.11 (gravada à mão com os mesmos passos e conferida de novo pelo script em modo seco, mesmo md5 `49b07d8d…`). Substitui a ideia de rodar o AnyKernel com `TMPDIR` em `/data/local/tmp`.
+
+### `2026-10-24` v4.11 gravada e bootada no S20 (`rear_torch_ua`)
+Gravada com o Android ligado pelo `magiskboot` (md5 relido `49b07d8d…`; backup da v4.10 em `build/r8q/boot-v4.10-2026-10-24.img`) e reiniciada com a aprovação do usuário. Pós-boot: `/proc/version` v4.11, Magisk 30.7 com root e todos os módulos, `ath9k_htc` carregado pelo companion da v4.9, e os atributos `rear_torch_ua`/`rear_torch_max_s` presentes (=0). O reboot pelo `ssh` (`svc power reboot`) não faz nada; foi pelo `adb shell su -c 'svc power reboot'`.

@@ -43,3 +43,8 @@
 
 ### `#12` ThinLTO: testado e DESCARTADO — so retomar com benchmark no aparelho
 *baixa* — (2026-08-12) — builda (exit 0), mas o `text` fica **+0,2%**, ou seja, o LTO praticamente nao mexeu no codigo; residente +0,7% e `Image.gz-dtb` +4,4%. E custa **quatro mudancas acopladas**: linker do kernel inteiro trocado para `ld.lld`, `MODVERSIONS` desligado (mudanca de ABI), `-j3` obrigatorio (a RAM da workstation e disputada com as VMs do PVE) e build muito mais lento. O ganho de "3-5%" **nunca foi verificado** aqui, e tamanho nao mede velocidade — se um dia for retomado, o criterio de aceite tem que ser **benchmark no aparelho**. Mapa completo dos obstaculos (incluindo o bug de `genksyms` com `union __packed` que existe na arvore desde sempre e vira erro fatal sob LTO) na memoria do projeto. Build descartado e arvore limpa; o `wirus_defconfig` nunca foi tocado
+
+## Validação
+
+### `#13` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
+*validação* — (2026-10-24) — a v4.11 está gravada e rodando, e os atributos `rear_torch_ua`/`rear_torch_max_s` existem em `/sys/class/camera/flash/`, mas o LED ainda não foi aceso. O teste fica com a sessão que pediu o recurso: varredura de duty com o sensor de luz traseiro TCS3408 no escuro (5..50 % devem dar ~0,05..0,50 do degrau de 25 mA, com a correção de +10 µs por pulso), clamp em 1250 µA, degraus ≥ 25 mA, parada por `rear_flash`/câmera e o teto `rear_torch_max_s`. Avisar o usuário antes de acender o LED. Limitações conhecidas: o PWM para no suspend (abaixo de 25 mA com a tela apagada precisa de wakelock) e o modo EOL do tcs3407 falha se o PWM estiver ativo
