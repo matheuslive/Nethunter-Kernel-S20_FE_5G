@@ -12,7 +12,6 @@
 
 #include "include/sec_adc.h"
 
-#define DEBUG
 
 struct adc_list {
 	const char *name;
@@ -591,7 +590,7 @@ int sec_bat_get_direct_chg_temp_adc(struct sec_battery_info *battery,
 		(temp_adc_table[low].adc - temp_adc_table[high].adc);
 
 direct_chg_temp_goto:
-	dev_info(battery->dev,
+	dev_dbg(battery->dev,
 			"%s: temp(%d), direct-chg-temp-ADC(%d)\n",
 			__func__, temp, temp_adc);
 

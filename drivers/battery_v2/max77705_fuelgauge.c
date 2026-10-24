@@ -10,7 +10,6 @@
  * published by the Free Software Foundation.
  */
 
-#define DEBUG
 /* #define BATTERY_LOG_MESSAGE */
 
 #include <linux/mfd/max77705-private.h>
@@ -449,7 +448,7 @@ static int max77705_fg_read_qh(struct max77705_fuelgauge_data *fuelgauge)
 	if (sign)
 		qh *= -1;
 
-	pr_info("%s : QH(%d)\n", __func__, qh);
+	pr_debug("%s : QH(%d)\n", __func__, qh);
 
 	return qh;
 }
@@ -1825,7 +1824,7 @@ static int max77705_fg_check_initialization_result(
 			__func__, FG_INIT_RESULT_REG, data[1] << 8 | data[0]);
 		error_cause = SEC_BAT_ERROR_CAUSE_FG_INIT_FAIL;
 	} else {
-		pr_info("%s : initialization is succeed.(0x%02X:0x%04X)\n",
+		pr_debug("%s : initialization is succeed.(0x%02X:0x%04X)\n",
 			__func__, FG_INIT_RESULT_REG, data[1] << 8 | data[0]);
 	}
 
@@ -2172,7 +2171,7 @@ static int max77705_fg_get_property(struct power_supply *psy,
 
 			val->intval = fullcap * 100 /
 				(fuelgauge->battery_data->Capacity * fuelgauge->fg_resistor / 2);
-			pr_info("%s: asoc(%d), fullcap(%d)\n", __func__,
+			pr_debug("%s: asoc(%d), fullcap(%d)\n", __func__,
 				val->intval, fullcap);
 		}
 		break;

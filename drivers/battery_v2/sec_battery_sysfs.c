@@ -356,7 +356,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 				psy_do_property(battery->pdata->fuelgauge_name, get,
 					POWER_SUPPLY_EXT_PROP_MEASURE_SYS, isys);
 			}
-			pr_err("%s: batt_current_ua_now - Input(%dmV, %dmA), Output(%dmA), ISys(%dmA)\n",
+			pr_debug("%s: batt_current_ua_now - Input(%dmV, %dmA), Output(%dmA), ISys(%dmA)\n",
 					__func__, vin.intval, iin.intval, value.intval, isys.intval);
 
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
@@ -692,7 +692,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 					battery->max_charge_power >= HV_CHARGER_STATUS_STANDARD1) /* 12000mW */
 					check_val = AFC_9V_OR_15W;
 			}
-			pr_info("%s : HV_CHARGER_STATUS(%d) pd max charge power(%d), max_charge_power(%d)\n",
+			pr_debug("%s : HV_CHARGER_STATUS(%d) pd max charge power(%d), max_charge_power(%d)\n",
 				__func__, check_val, battery->pd_max_charge_power, battery->max_charge_power);
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", check_val);
 		}
@@ -841,7 +841,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		value.intval = SEC_BATTERY_VBYP;
 		psy_do_property(battery->pdata->fuelgauge_name, get,
 			POWER_SUPPLY_EXT_PROP_MEASURE_INPUT, value);
-		pr_info("%s: vbyp(%d)mV\n", __func__, value.intval);
+		pr_debug("%s: vbyp(%d)mV\n", __func__, value.intval);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 				value.intval);
 		break;
@@ -876,7 +876,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		psy_do_property(battery->pdata->fuelgauge_name, get,
 			POWER_SUPPLY_PROP_ENERGY_NOW, value);
 		value.intval = value.intval / 100;
-		dev_info(battery->dev, "fg cycle(%d)\n", value.intval);
+		dev_dbg(battery->dev, "fg cycle(%d)\n", value.intval);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", value.intval);
 		break;
 	case FG_FULL_VOLTAGE:
@@ -1090,7 +1090,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 #endif
 	case WC_TX_STOP_CAPACITY:
 		ret = battery->pdata->tx_stop_capacity;
-		pr_info("%s tx stop capacity = %d%%", __func__, ret);
+		pr_debug("%s tx stop capacity = %d%%", __func__, ret);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 			ret);
 		break;
@@ -1302,7 +1302,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 			psy_do_property(battery->pdata->fuelgauge_name, get,
 				POWER_SUPPLY_EXT_PROP_ERROR_CAUSE, value);
 			error_cause |= value.intval;
-			pr_info("%s: ERROR_CAUSE = 0x%X ",__func__, error_cause);
+			pr_debug("%s: ERROR_CAUSE = 0x%X ",__func__, error_cause);
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 				error_cause);
 		}
@@ -1885,7 +1885,7 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 #endif
 			} else
 				value.strval = "UNKNOWN";
-			pr_info("%s: CHARGING_TYPE = %s\n",__func__, value.strval);
+			pr_debug("%s: CHARGING_TYPE = %s\n",__func__, value.strval);
 			i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n", value.strval);
 		}
 		break;
@@ -1900,11 +1900,11 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 			value.strval = "PD Disabled";
 		else
 			value.strval = "PD Enabled";
-		pr_info("%s: PD = %s\n",__func__, value.strval);
+		pr_debug("%s: PD = %s\n",__func__, value.strval);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->pd_disable);
 		break;
 	case BATT_FULL_CAPACITY:
-		pr_info("%s: BATT_FULL_CAPACITY = %d\n", __func__, battery->batt_full_capacity);
+		pr_debug("%s: BATT_FULL_CAPACITY = %d\n", __func__, battery->batt_full_capacity);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", battery->batt_full_capacity);
 		break;
 	case LRP:
