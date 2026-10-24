@@ -122,3 +122,6 @@ O kmsg corria a ~4000 linhas/min. O `kernel/signal.c` não loga mais o SIGSEGV d
 
 ### `2026-10-24` `service.sh` do companion carrega o `ath9k_htc` no boot e o `wmon` usa `wlan1` por padrão
 Conferido no S20 com a v4.10 (uptime de 8 h 27 min, sem `usbwifi` à mão): `lsmod` mostra `ath9k_htc`/`ath9k_common`/`ath9k_hw`/`ath` carregados desde o boot, e o `wmon` sem argumentos procura o `wlan1` e, sem o dongle plugado, sai com rc=1 e uma mensagem, sem cair no `wlan0` interno.
+
+### `2026-10-24` Flash com o Android ligado: `tools/flash-booted.sh`
+O script refaz por `magiskboot`, sobre o boot atual, o que o AnyKernel faria no recovery: split do zImage, hexpatch `skip_initramfs`→`want_initramfs`, troca só do kernel (ramdisk, cmdline, dtb e kernel_dtb ficam os atuais), backup em `build/r8q/boot-<versão>-<data>.img`, gravação só se a partição não mudou desde o backup e md5 relido. Sem `--write` só prepara. Estreou na v4.11 (gravada à mão com os mesmos passos e conferida de novo pelo script em modo seco, mesmo md5 `49b07d8d…`). Substitui a ideia de rodar o AnyKernel com `TMPDIR` em `/data/local/tmp`.
