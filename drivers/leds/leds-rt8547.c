@@ -17,6 +17,11 @@
 #include <linux/slab.h>
 #include <linux/gpio.h>
 #include <linux/leds-rt8547.h>
+#include <linux/hrtimer.h>
+#include <linux/ktime.h>
+#include <linux/mutex.h>
+#include <linux/workqueue.h>
+#include <linux/jiffies.h>
 #ifdef CONFIG_OF
 #include <linux/of.h>
 #include <linux/of_gpio.h>
@@ -30,6 +35,34 @@ struct device *global_dev;
 
 bool sysfs_flash_op;
 bool flash_config_factory;
+
+/*
+ * rear_torch_ua: torch current in uA.
+ *  >= 25000: nearest torch step (25..400 mA), FLEN constant high.
+ *   < 25000: step 0 (25 mA) + 1 kHz PWM on FLEN by hrtimer, duty = uA/25000
+ *            (min 5 %). FLSET is never touched while the PWM runs: FLSET low
+ *            for >= 1.5 ms shuts the chip down, and stray pulses on it are
+ *            register writes.
+ * rt8547_lock serializes every path that drives the chip (sysfs, camera,
+ * flicker sensor); the hrtimer callback only flips FLEN.
+ */
+#define RT8547_TORCH_STEP_UA	25000
+#define RT8547_PWM_PERIOD_NS	1000000
+#define RT8547_PWM_MIN_UA	(RT8547_TORCH_STEP_UA / 20)	/* 5 % */
+#define RT8547_PWM_LOSS_NS	10000	/* chip turn-on time lost per pulse */
+#define RT8547_PWM_MIN_OFF_NS	20000
+
+static DEFINE_MUTEX(rt8547_lock);
+static struct hrtimer rt8547_pwm_timer;
+static bool rt8547_pwm_active;
+static bool rt8547_pwm_level;
+static u64 rt8547_pwm_on_ns;
+static u64 rt8547_pwm_off_ns;
+static unsigned int rt8547_torch_ua;
+static unsigned int rt8547_torch_max_s;
+static unsigned long rt8547_torch_deadline;
+static void rt8547_torch_off_fn(struct work_struct *work);
+static DECLARE_DELAYED_WORK(rt8547_torch_off_work, rt8547_torch_off_fn);
 
 void rt8547_led_setGpio(int onoff)
 {
@@ -105,6 +138,170 @@ static int rt8547_led_write_data(unsigned int regAddr, unsigned int data)
 	return err;
 }
 
+/* hrtimer callback, atomic context: only flips FLEN and re-arms. */
+static enum hrtimer_restart rt8547_pwm_fn(struct hrtimer *timer)
+{
+	u64 next;
+	ktime_t now;
+
+	rt8547_pwm_level = !rt8547_pwm_level;
+	gpio_set_value(global_rt8547data->flash_en, rt8547_pwm_level);
+
+	/* advance from the last expiry so edge latency does not skew the duty */
+	next = rt8547_pwm_level ? rt8547_pwm_on_ns : rt8547_pwm_off_ns;
+	hrtimer_add_expires_ns(timer, next);
+	now = hrtimer_cb_get_time(timer);
+	if (ktime_before(hrtimer_get_expires(timer), now))
+		hrtimer_forward(timer, now, ns_to_ktime(next));
+
+	return HRTIMER_RESTART;
+}
+
+/*
+ * Stops the PWM (FLEN low, GPIO released) and forgets rear_torch_ua.
+ * A constant (>= 25 mA) torch is left as is: the caller reprograms the chip.
+ * Caller holds rt8547_lock.
+ */
+static void rt8547_torch_ua_stop_locked(void)
+{
+	unsigned long flags = 0;
+
+	cancel_delayed_work(&rt8547_torch_off_work);
+	rt8547_torch_deadline = 0;
+
+	if (rt8547_pwm_active) {
+		hrtimer_cancel(&rt8547_pwm_timer);
+		spin_lock_irqsave(&global_rt8547data->int_lock, flags);
+		gpio_set_value(global_rt8547data->flash_en, 0);
+		spin_unlock_irqrestore(&global_rt8547data->int_lock, flags);
+		gpio_free(global_rt8547data->flash_en);
+		rt8547_pwm_active = false;
+	}
+	rt8547_torch_ua = 0;
+}
+
+static void rt8547_torch_arm_timeout_locked(void)
+{
+	cancel_delayed_work(&rt8547_torch_off_work);
+	rt8547_torch_deadline = 0;
+
+	if (rt8547_torch_ua && rt8547_torch_max_s) {
+		/* 0 means "no timeout", so never store a deadline of 0 */
+		rt8547_torch_deadline = (jiffies + rt8547_torch_max_s * HZ) | 1;
+		schedule_delayed_work(&rt8547_torch_off_work,
+			rt8547_torch_max_s * HZ);
+	}
+}
+
+/* Caller holds rt8547_lock. */
+static int rt8547_torch_ua_set_locked(unsigned int ua)
+{
+	struct rt8547_led_platform_data *pdata = global_rt8547data;
+	unsigned long flags = 0;
+	unsigned int step = 0;
+	u64 on_ns = 0;
+	bool pwm = false;
+	int ret = 0;
+
+	rt8547_torch_ua_stop_locked();
+	sysfs_flash_op = false;
+
+	ret = gpio_request(pdata->flash_control, "rt8547_led_control");
+	if (ret) {
+		pr_err("%s: Failed to request rt8547_led_control\n", __func__);
+		return ret;
+	}
+
+	ret = gpio_request(pdata->flash_en, "rt8547_led_en");
+	if (ret) {
+		gpio_free(pdata->flash_control);
+		pr_err("%s: Failed to request rt8547_led_en\n", __func__);
+		return ret;
+	}
+
+	if (ua == 0) {
+		pdata->mode_status = RT8547_DISABLES_TORCH_FLASH_MODE;
+		spin_lock_irqsave(&pdata->int_lock, flags);
+		rt8547_led_setGpio(0);
+		spin_unlock_irqrestore(&pdata->int_lock, flags);
+		gpio_free(pdata->flash_control);
+		gpio_free(pdata->flash_en);
+		pr_info("%s: torch off\n", __func__);
+		return 0;
+	}
+
+	if (ua >= RT8547_TORCH_STEP_UA) {
+		/* nearest step, 0..15 = 25..400 mA */
+		step = (ua + RT8547_TORCH_STEP_UA / 2) / RT8547_TORCH_STEP_UA - 1;
+		if (step > 15)
+			step = 15;
+		ua = (step + 1) * RT8547_TORCH_STEP_UA;
+	} else {
+		if (ua < RT8547_PWM_MIN_UA)
+			ua = RT8547_PWM_MIN_UA;
+		on_ns = (u64)ua * RT8547_PWM_PERIOD_NS / RT8547_TORCH_STEP_UA +
+			RT8547_PWM_LOSS_NS;
+		if (on_ns > RT8547_PWM_PERIOD_NS - RT8547_PWM_MIN_OFF_NS)
+			ua = RT8547_TORCH_STEP_UA;	/* close enough to constant */
+		else
+			pwm = true;
+	}
+
+	pdata->mode_status = RT8547_ENABLE_TORCH_MODE;
+	spin_lock_irqsave(&pdata->int_lock, flags);
+	rt8547_led_write_data(RT8547_ADDR_LVP_SETTING, RT8547_3V);
+	rt8547_led_write_data(RT8547_ADDR_CURRENT_SETTING,
+		step | RT8547_TORCH_SELECT);
+	rt8547_led_write_data(RT8547_ADDR_FLASH_CURRENT_LEVEL_TIMEOUT_SETTING,
+		(RT8547_TIMEOUT_CURRENT_400mA << 5) | RT8547_FLASH_CURRENT_150mA);
+	rt8547_led_write_data(RT8547_ADDR_FLASH_TIMEOUT_SETTING, RT8547_TIMER_1216ms);
+	gpio_direction_output(pdata->flash_en, 1);
+	spin_unlock_irqrestore(&pdata->int_lock, flags);
+
+	gpio_free(pdata->flash_control);
+
+	if (pwm) {
+		/* flash_en stays requested while the PWM owns it */
+		rt8547_pwm_on_ns = on_ns;
+		rt8547_pwm_off_ns = RT8547_PWM_PERIOD_NS - on_ns;
+		rt8547_pwm_level = true;
+		rt8547_pwm_active = true;
+		hrtimer_start(&rt8547_pwm_timer, ns_to_ktime(on_ns),
+			HRTIMER_MODE_REL);
+		pr_info("%s: %u uA (step 0, pwm on %llu ns / %d ns)\n", __func__,
+			ua, on_ns, RT8547_PWM_PERIOD_NS);
+	} else {
+		gpio_free(pdata->flash_en);
+		pr_info("%s: %u uA (step %u)\n", __func__, ua, step);
+	}
+
+	rt8547_torch_ua = ua;
+	rt8547_torch_arm_timeout_locked();
+
+	return 0;
+}
+
+static void rt8547_torch_off_fn(struct work_struct *work)
+{
+	mutex_lock(&rt8547_lock);
+	/* a newer request may have moved (or dropped) the deadline */
+	if (rt8547_torch_ua && rt8547_torch_deadline &&
+	    time_after_eq(jiffies, rt8547_torch_deadline)) {
+		pr_info("%s: rear_torch_max_s reached\n", __func__);
+		rt8547_torch_ua_set_locked(0);
+	}
+	mutex_unlock(&rt8547_lock);
+}
+
+/* Suspend/shutdown/remove: the PWM cannot run without the hrtimer. */
+static void rt8547_torch_ua_halt(bool pwm_only)
+{
+	mutex_lock(&rt8547_lock);
+	if (rt8547_pwm_active || (!pwm_only && rt8547_torch_ua))
+		rt8547_torch_ua_set_locked(0);
+	mutex_unlock(&rt8547_lock);
+}
+
 ssize_t rt8547_led_store(struct device *dev,
 			struct device_attribute *attr, const char *buf,
 			size_t count)
@@ -121,8 +318,12 @@ ssize_t rt8547_led_store(struct device *dev,
 
 	global_rt8547data->sysfs_input_data = value;
 
+	mutex_lock(&rt8547_lock);
+	rt8547_torch_ua_stop_locked();
+
 	ret = gpio_request(global_rt8547data->flash_control, "rt8547_led_control");
 	if (ret) {
+		mutex_unlock(&rt8547_lock);
 		pr_err("%s: Failed to requeset rt8547_led_control\n", __func__);
 		return -1;
 	}
@@ -130,6 +331,7 @@ ssize_t rt8547_led_store(struct device *dev,
 	ret = gpio_request(global_rt8547data->flash_en, "rt8547_led_en");
 	if (ret) {
 		gpio_free(global_rt8547data->flash_control);
+		mutex_unlock(&rt8547_lock);
 		pr_err("%s: Failed to requeset rt8547_led_en\n", __func__);
 		return -1;
 	}
@@ -212,6 +414,7 @@ ssize_t rt8547_led_store(struct device *dev,
 
 	gpio_free(global_rt8547data->flash_control);
 	gpio_free(global_rt8547data->flash_en);
+	mutex_unlock(&rt8547_lock);
 
 	return count;
 }
@@ -223,13 +426,19 @@ int64_t rt8547_led_mode_ctrl(int state, int value)
 	int ret = 0;
 	unsigned long flags = 0;
 
+	mutex_lock(&rt8547_lock);
+	/* the camera takes over from rear_torch_ua */
+	rt8547_torch_ua_stop_locked();
+
 	if (sysfs_flash_op == true) {
+		mutex_unlock(&rt8547_lock);
 		pr_info("%s: sysfs_flash_op is enabled \n", __func__);
 		return 0;
 	}
 
 	ret = gpio_request(global_rt8547data->flash_control, "rt8547_led_control");
 	if (ret) {
+		mutex_unlock(&rt8547_lock);
 		pr_err("%s: Failed to requeset rt8547_led_control\n", __func__);
 		return ret;
 	}
@@ -237,6 +446,7 @@ int64_t rt8547_led_mode_ctrl(int state, int value)
 	ret = gpio_request(global_rt8547data->flash_en, "rt8547_led_en");
 	if (ret) {
 		gpio_free(global_rt8547data->flash_control);
+		mutex_unlock(&rt8547_lock);
 		pr_err("%s: Failed to requeset rt8547_led_en\n", __func__);
 		return ret;
 	}
@@ -320,7 +530,7 @@ int64_t rt8547_led_mode_ctrl(int state, int value)
 
 	gpio_free(global_rt8547data->flash_en);
 	gpio_free(global_rt8547data->flash_control);
-
+	mutex_unlock(&rt8547_lock);
 
 	return ret;
 }
@@ -330,10 +540,14 @@ int32_t rt8547_led_set_torch(int curr)
 	int ret = 0;
 	unsigned long flags = 0;
 
+	mutex_lock(&rt8547_lock);
+	rt8547_torch_ua_stop_locked();
+
 	if (curr == -1) {
 		spin_lock_irqsave(&global_rt8547data->int_lock, flags);
 		rt8547_led_setGpio(0);
 		spin_unlock_irqrestore(&global_rt8547data->int_lock, flags);
+		mutex_unlock(&rt8547_lock);
 
 		LED_INFO("RT8547-FLASH OFF X(%d)\n", curr);
 		return 0;
@@ -341,6 +555,7 @@ int32_t rt8547_led_set_torch(int curr)
 
 	ret = gpio_request(global_rt8547data->flash_control, "rt8547_led_control");
 	if (ret) {
+		mutex_unlock(&rt8547_lock);
 		LED_ERROR("Failed to request rt8547_led_mode_ctrl\n");
 		return ret;
 	}
@@ -358,6 +573,7 @@ int32_t rt8547_led_set_torch(int curr)
 	LED_INFO("RT8547-FLICKERTEST ON X(%d)\n", curr);
 
 	gpio_free(global_rt8547data->flash_control);
+	mutex_unlock(&rt8547_lock);
 
 	return ret;
 }
@@ -372,6 +588,56 @@ static DEVICE_ATTR(rear_flash, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
 	rt8547_led_show, rt8547_led_store);
 static DEVICE_ATTR(rear_torch_flash, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
 	rt8547_led_show, rt8547_led_store);
+
+static ssize_t rear_torch_ua_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", READ_ONCE(rt8547_torch_ua));
+}
+
+static ssize_t rear_torch_ua_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int ua = 0;
+	int ret = 0;
+
+	if (kstrtouint(buf, 10, &ua))
+		return -EINVAL;
+
+	mutex_lock(&rt8547_lock);
+	ret = rt8547_torch_ua_set_locked(ua);
+	mutex_unlock(&rt8547_lock);
+
+	return ret ? ret : count;
+}
+
+static ssize_t rear_torch_max_s_show(struct device *dev,
+		struct device_attribute *attr, char *buf)
+{
+	return sprintf(buf, "%u\n", READ_ONCE(rt8547_torch_max_s));
+}
+
+/* 0 = no limit; a change re-arms the timeout of a torch already on. */
+static ssize_t rear_torch_max_s_store(struct device *dev,
+		struct device_attribute *attr, const char *buf, size_t count)
+{
+	unsigned int max_s = 0;
+
+	if (kstrtouint(buf, 10, &max_s) || max_s > 86400)
+		return -EINVAL;
+
+	mutex_lock(&rt8547_lock);
+	rt8547_torch_max_s = max_s;
+	rt8547_torch_arm_timeout_locked();
+	mutex_unlock(&rt8547_lock);
+
+	return count;
+}
+
+static DEVICE_ATTR(rear_torch_ua, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
+	rear_torch_ua_show, rear_torch_ua_store);
+static DEVICE_ATTR(rear_torch_max_s, S_IRUSR|S_IWUSR|S_IRGRP|S_IWGRP|S_IROTH,
+	rear_torch_max_s_show, rear_torch_max_s_store);
 
 static int rt8547_led_parse_dt(struct device *dev,
                                 struct rt8547_led_platform_data *pdata)
@@ -466,6 +732,10 @@ static int rt8547_led_probe(struct platform_device *pdev)
 	gpio_free(global_rt8547data->flash_control);
 	gpio_free(global_rt8547data->flash_en);
 
+	spin_lock_init(&pdata->int_lock);
+	hrtimer_init(&rt8547_pwm_timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL);
+	rt8547_pwm_timer.function = rt8547_pwm_fn;
+
 	if (camera_class == NULL) {
 		camera_class = class_create(THIS_MODULE, "camera");
 		if (IS_ERR(camera_class))
@@ -489,13 +759,22 @@ static int rt8547_led_probe(struct platform_device *pdev)
 					__func__, dev_attr_rear_torch_flash.attr.name);
 			return -ENOENT;
 		}
+		if (device_create_file(rt8547_led_dev, &dev_attr_rear_torch_ua) < 0)
+			pr_err("%s: failed to create device file, %s\n",
+					__func__, dev_attr_rear_torch_ua.attr.name);
+		if (device_create_file(rt8547_led_dev, &dev_attr_rear_torch_max_s) < 0)
+			pr_err("%s: failed to create device file, %s\n",
+					__func__, dev_attr_rear_torch_max_s.attr.name);
 	}
-	spin_lock_init(&pdata->int_lock);
 
 	return 0;
 }
 static int rt8547_led_remove(struct platform_device *pdev)
 {
+	device_remove_file(rt8547_led_dev, &dev_attr_rear_torch_ua);
+	device_remove_file(rt8547_led_dev, &dev_attr_rear_torch_max_s);
+	rt8547_torch_ua_halt(false);
+	cancel_delayed_work_sync(&rt8547_torch_off_work);
 	device_remove_file(rt8547_led_dev, &dev_attr_rear_flash);
 	device_remove_file(rt8547_led_dev, &dev_attr_rear_torch_flash);
 	device_destroy(camera_class, 0);
@@ -503,6 +782,22 @@ static int rt8547_led_remove(struct platform_device *pdev)
 
 	return 0;
 }
+
+static void rt8547_led_shutdown(struct platform_device *pdev)
+{
+	rt8547_torch_ua_halt(false);
+}
+
+#ifdef CONFIG_PM_SLEEP
+static int rt8547_led_suspend(struct device *dev)
+{
+	/* a constant torch survives suspend like rear_flash; the PWM cannot */
+	rt8547_torch_ua_halt(true);
+	return 0;
+}
+#endif
+
+static SIMPLE_DEV_PM_OPS(rt8547_led_pm_ops, rt8547_led_suspend, NULL);
 
 #ifdef CONFIG_OF
 static struct of_device_id cam_flash_dt_match[] = {
@@ -515,9 +810,11 @@ static struct of_device_id cam_flash_dt_match[] = {
 static struct platform_driver rt8547_led_driver = {
 	.probe		= rt8547_led_probe,
 	.remove		= rt8547_led_remove,
+	.shutdown	= rt8547_led_shutdown,
 	.driver		= {
 		.name	= "rt8547-led",
 		.owner	= THIS_MODULE,
+		.pm	= &rt8547_led_pm_ops,
 #if defined(CONFIG_OF)
 		.of_match_table = cam_flash_dt_match,
 #endif
