@@ -162,7 +162,8 @@ ssize_t rt8547_led_store(struct device *dev,
 				global_rt8547data->factory_current_value | RT8547_TORCH_SELECT);
 		} else if ((1001 <= value) && (value <= 2015)) {
 			/* (value) 1001, 1002, 1004, 1006, 1009
-			: (torch_step) 1(50mA), 3(100mA), 5(150mA), 6(175mA), 7(200mA) */
+			: (torch_step) 1(50mA), 3(100mA), 5(150mA), 6(175mA), 7(200mA)
+			 * (value) 2000..2015 : (torch_step) 0..15 (25mA..400mA) */
 			if (value <= 1001)
 				torch_step = 1;
 			else if (value <= 1002)
@@ -175,7 +176,7 @@ ssize_t rt8547_led_store(struct device *dev,
 				torch_step = 7;
 			else if (value <= 1010)
 				torch_step = 8;
-			else if ((2001 <= value) && (value <= 2015))
+			else if ((2000 <= value) && (value <= 2015))
 				torch_step = value - 2000;
 			else
 				torch_step = 1;
