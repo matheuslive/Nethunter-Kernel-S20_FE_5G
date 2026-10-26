@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-10-26
+
+- **13:32 Implementado:** companion v4.11.1 com os módulos USB/IP (`usbip-core`, `vhci-hcd`, `usbip-host`), carregados no boot; o vmlinux é o mesmo da v4.11 ([2c8cea9](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/2c8cea935))
+
 ## 2026-10-24
 
 - **15:16 Incluído:** `tools/flash-booted.sh`, grava o kernel de um zip pelo magiskboot com o Android ligado, com backup e md5 relido ([23af48a](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/23af48a46))
