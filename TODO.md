@@ -44,6 +44,9 @@
 ### `#12` ThinLTO: testado e DESCARTADO — so retomar com benchmark no aparelho
 *baixa* — (2026-08-12) — builda (exit 0), mas o `text` fica **+0,2%**, ou seja, o LTO praticamente nao mexeu no codigo; residente +0,7% e `Image.gz-dtb` +4,4%. E custa **quatro mudancas acopladas**: linker do kernel inteiro trocado para `ld.lld`, `MODVERSIONS` desligado (mudanca de ABI), `-j3` obrigatorio (a RAM da workstation e disputada com as VMs do PVE) e build muito mais lento. O ganho de "3-5%" **nunca foi verificado** aqui, e tamanho nao mede velocidade — se um dia for retomado, o criterio de aceite tem que ser **benchmark no aparelho**. Mapa completo dos obstaculos (incluindo o bug de `genksyms` com `union __packed` que existe na arvore desde sempre e vira erro fatal sob LTO) na memoria do projeto. Build descartado e arvore limpa; o `wirus_defconfig` nunca foi tocado
 
+### `#14` Guardar o `Module.symvers` de cada release e ter um modo "só companion" no `build.sh`
+*baixa* — (2026-10-26) No USB/IP v4.11.1 não havia `Module.symvers` salvo da v4.11; a prova dos CRCs foi recompilar com os `KBUILD_BUILD_*` da v4.11 e comparar a Image byte a byte. Salvar `Module.symvers` (e o `vmlinux`) em `build/r8q/<versão>/` a cada build. Além disso, o `build.sh` publica o zip do kernel junto com o companion: para um companion novo sobre a mesma Image, a raiz e o SD receberiam um zip de kernel com bytes diferentes do gravado (o deploy foi feito à mão). Uma flag `--companion-only` resolveria.
+
 ## Validação
 
 ### `#13` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)

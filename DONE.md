@@ -128,3 +128,6 @@ O script refaz por `magiskboot`, sobre o boot atual, o que o AnyKernel faria no 
 
 ### `2026-10-24` v4.11 gravada e bootada no S20 (`rear_torch_ua`)
 Gravada com o Android ligado pelo `magiskboot` (md5 relido `49b07d8d…`; backup da v4.10 em `build/r8q/boot-v4.10-2026-10-24.img`) e reiniciada com a aprovação do usuário. Pós-boot: `/proc/version` v4.11, Magisk 30.7 com root e todos os módulos, `ath9k_htc` carregado pelo companion da v4.9, e os atributos `rear_torch_ua`/`rear_torch_max_s` presentes (=0). O reboot pelo `ssh` (`svc power reboot`) não faz nada; foi pelo `adb shell su -c 'svc power reboot'`.
+
+### `2026-10-26` USB/IP como módulos no companion v4.11.1
+`CONFIG_USBIP_CORE/VHCI_HCD/HOST=m` no `wirus_defconfig` e os três `.ko` (`usbip-core`, `vhci-hcd`, `usbip-host`) no companion v4.11.1, carregados pelo `service.sh` no boot (commit `2c8cea935`). Vermagic igual ao da v4.11; os CRCs foram provados pela Image recompilada com os `KBUILD_BUILD_*` da v4.11 (só 24 bytes diferentes, nenhum de código). Instalado no S20 pelo Magisk, reboot feito pelo usuário: os três módulos sobem no boot e o `vhci_hcd.0` existe.
