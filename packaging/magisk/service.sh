@@ -20,3 +20,14 @@ while [ ! -x "$USBWIFI" ] && [ "$i" -lt 20 ]; do
 done
 
 [ -x "$USBWIFI" ] && "$USBWIFI" ath9k_htc >/dev/null 2>&1
+
+# USB/IP (usbip-core -> vhci-hcd -> usbip-host): carregados no boot para que o
+# userspace (usbip/usbipd) use o vhci e o stub sem precisar de root extra para
+# insmod. insmod direto, na ordem das dependencias, em vez de modprobe: o
+# modprobe do toybox e os nomes com hifen nao sao confiaveis. Ja carregado
+# (/sys/module/<nome>) e pulado, entao rodar de novo e inocuo.
+KODIR="/data/adb/modules/$MODID/modules"
+for ko in usbip-core vhci-hcd usbip-host; do
+	[ -d "/sys/module/$(echo "$ko" | tr - _)" ] && continue
+	[ -f "$KODIR/$ko.ko" ] && insmod "$KODIR/$ko.ko" >/dev/null 2>&1
+done

@@ -78,6 +78,15 @@ Para forçar o `wlan0` interno (que não captura — muro de firmware) use
 O companion **carrega o `ath9k_htc` (AR9271) no boot** (`service.sh`), então o
 dongle vira `wlan1` sozinho ao plugar, sem precisar rodar `usbwifi`.
 
+## USB/IP
+
+Desde o companion **v4.11.1** vão junto `usbip-core.ko`, `vhci-hcd.ko` e
+`usbip-host.ko` (`CONFIG_USBIP_*=m`, 8 portas, 1 HC), e o `service.sh` os carrega
+no boot nessa ordem (`insmod` direto). Com eles o aparelho pode tanto importar um
+device USB remoto (`vhci-hcd`, aparece em `/sys/devices/platform/vhci_hcd.0`)
+quanto exportar um local (`usbip-host`). Os `.ko` foram compilados contra a Image
+da v4.11, sem mudar o vmlinux: não é preciso regravar o kernel.
+
 ```sh
 sudo wmon              # usa o dongle wlan1 (hopping)
 sudo wmon -c 6         # trava no canal 6
