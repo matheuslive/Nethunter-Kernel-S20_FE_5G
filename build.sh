@@ -242,8 +242,8 @@ rm -f "$DIST/nethunter-companion-$VARIANT.zip"
 
 # --- 3. (removido em 2026-11-01) Modulo Magisk de bateria ------------------
 #
-# O packaging/magisk-battery era legado desde 2026-10-08 (substituido por um
-# modulo mantido fora deste repo) e foi apagado; a doc do lado do kernel esta
+# O packaging/magisk-battery era legado desde 2026-10-08 (substituido pelo
+# mod_companion do app Mod) e foi apagado; a doc do lado do kernel esta
 # em docs/battery-sysfs.md. O nethunter-battery-<variant>.zip segue no PRUNE
 # para sumir da raiz e do SD se ainda estiver la.
 ZIPS=(

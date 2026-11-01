@@ -1,9 +1,9 @@
 # Bateria do r8q pelo sysfs — o que o kernel NetHunter expõe
 
 O módulo Magisk que aplica estes ajustes no boot (`battctl`,
-`/data/adb/nethunter-battery.conf`) **não mora mais neste repo** desde
-2026-11-01: a cópia que ficava em `packaging/magisk-battery/` era legado
-desde 2026-10-08 e foi removida. Aqui fica a parte do kernel: o que cada
+`/data/adb/nethunter-battery.conf`) vive no **mod_companion do app Mod** desde
+2026-10-08; a cópia legada que ficava em `packaging/magisk-battery/` foi
+removida em 2026-11-01. Aqui fica a parte do kernel: o que cada
 atributo de `/sys/class/power_supply/battery/` faz, o que exige o kernel
 NetHunter e as armadilhas do driver `sec_battery`. As correntes do SIOP
 estão em [siop-sysfs.md](siop-sysfs.md).
