@@ -39,6 +39,7 @@ mkdir u s chk
 	77616E745F696E697472616D667300 >/dev/null 2>&1 || true
 grep -q want_initramfs s/kernel || { echo "hexpatch falhou"; exit 1; }
 cmp -s s/kernel_dtb u/kernel_dtb || echo "aviso: kernel_dtb do zip difere do atual (mantido o atual)"
+grep -ao 'matheuslive_r8q_v[0-9.]*' u/kernel | head -1 > cur.ver || true
 cp s/kernel u/kernel
 (cd u && \$MB repack ../boot-cur.img ../boot-new.img >/dev/null 2>&1)
 (cd chk && \$MB unpack ../boot-new.img >/dev/null 2>&1)
@@ -48,7 +49,8 @@ echo "atual: \$(cat boot-cur.md5)  nova: \$(cat boot-new.md5)"
 EOF
 
 # versao pelo kernel que ESTA na particao (pode diferir do que esta rodando)
-CUR=$(ssh "$HOST" "grep -ao 'matheuslive_r8q_v[0-9.]*' $WD/u/kernel | head -1" | sed 's/.*_//')
+# (lida antes do cp s/kernel u/kernel; depois dele o u/kernel ja e o novo)
+CUR=$(ssh "$HOST" "cat $WD/cur.ver" | sed 's/.*_//')
 scp -q "$HOST:$WD/boot-cur.img" "$DIR/build/r8q/boot-${CUR:-atual}-$STAMP.img"
 echo ">> backup: build/r8q/boot-${CUR:-atual}-$STAMP.img"
 
