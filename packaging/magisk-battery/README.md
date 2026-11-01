@@ -130,10 +130,12 @@ seu.
 O *direct charging* (carregador PPS, cabo APDO) carrega em 3 passos que só
 existiam no device tree. A partir da v4.12 o kernel os expõe em
 `/sys/class/power_supply/battery/`. Cada atributo gravável lê e aceita
-**uma lista com um inteiro por passo** (3 no r8q), da linha do degrau de age
-atual:
+**uma lista com um inteiro por passo** (3 no r8q). `iout`, `vfloat` e
+`cond_soc` têm uma linha por degrau de age e o atributo mexe só na do degrau
+atual; `cond_vol` é uma tabela só, para todos os degraus (o aging apenas a
+recorta para baixo):
 
-| Atributo | O que é | Fábrica (r8q, degrau 2) |
+| Atributo | O que é | No aparelho (degrau 2) |
 |---|---|---|
 | `dc_step_chg_val_iout` | corrente de saída de cada passo (mA) | `5290 4090 3670` |
 | `dc_step_chg_val_vfloat` | float de cada passo (mV) | `4125 4250 4340`* |
