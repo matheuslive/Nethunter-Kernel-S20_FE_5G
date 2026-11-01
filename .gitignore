@@ -5,3 +5,6 @@
 /*.zip
 
 __pycache__/
+
+# Scratch de sessao (ver CLAUDE.md global)
+/tmp/
