@@ -38,8 +38,5 @@
 
 ## Validação
 
-### `#11` Conferir no próximo reboot se o `service.sh` carrega o `ath9k_htc`
-*validação* — com o dongle plugado antes do boot, ver se o `ath9k_htc` aparece em `/proc/modules` e a `wlan1` nasce sem replug. Em 2026-11-01 o módulo estava carregado, mas sem dar para separar o `service.sh` do hotplug do dongle (o `dmesg` só mostrava o probe no replug, aos 658 s)
-
-### `#12` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
+### `#11` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
 *validação* — (2026-10-24) — a v4.11 está gravada e rodando, e os atributos `rear_torch_ua`/`rear_torch_max_s` existem em `/sys/class/camera/flash/`, mas o LED ainda não foi aceso. O teste fica com a sessão que pediu o recurso: varredura de duty com o sensor de luz traseiro TCS3408 no escuro (5..50 % devem dar ~0,05..0,50 do degrau de 25 mA, com a correção de +10 µs por pulso), clamp em 1250 µA, degraus ≥ 25 mA, parada por `rear_flash`/câmera e o teto `rear_torch_max_s`. Avisar o usuário antes de acender o LED. Limitações conhecidas: o PWM para no suspend (abaixo de 25 mA com a tela apagada precisa de wakelock) e o modo EOL do tcs3407 falha se o PWM estiver ativo
