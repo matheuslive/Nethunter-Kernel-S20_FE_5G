@@ -12,11 +12,21 @@
 #   (__FILE__ de WARN/BUG), e a comparacao byte a byte so vale assim.
 # - Os carimbos KBUILD_BUILD_TIMESTAMP/USER/HOST/VERSION saem da string
 #   "Linux version" da Image dentro de build/r8q/NetHunter_matheuslive_r8q_<versao>.zip.
-# - clean: apaga $KDIR/out antes (build do zero). O ccache roda com
-#   CCACHE_RECACHE=1: recompila tudo e regrava o cache (nao reaproveita objeto
-#   possivelmente corrompido por bit flip de RAM).
-# - No fim: compara a Image recompilada com a do zip (cmp -l) e salva
-#   Module.symvers, vmlinux e .config em build/r8q/<versao>/.
+# - clean: apaga $KDIR/out antes (build do zero). Mesmo com clean, o ccache
+#   reaproveita os objetos do cache (minutos, nao ~25 min), como no build.sh
+#   (sem ccache se o defconfig tiver CONFIG_DEBUG_INFO=y).
+# - RECACHE=1: comportamento antigo, CCACHE_RECACHE=1 (recompila tudo e regrava
+#   o cache, nada vem dele). Usar se a comparacao abaixo falhar.
+# - Rede de seguranca contra objeto corrompido (suspeita de bit flip de RAM do
+#   host, que pode ter entrado no cache): a Image recompilada e comparada com a
+#   do zip (cmp -l) e o tools/image-cmp-check.py SAI COM ERRO se algum byte
+#   diferente cair fora das duas regioes esperadas, achadas pelo out/vmlinux: o
+#   descriptor do GNU build-id (.notes, 20 B) e os digitos da data no
+#   g_wlan_driver_version do qcacld (~6-7 B). v4.11: 27 B; v4.12: 26 B.
+#   Tamanho diferente tambem e fatal.
+# - So com a comparacao limpa: salva Module.symvers, vmlinux, .config,
+#   linux_version.txt e image-cmp.txt em build/r8q/<versao>/ (o build.sh
+#   salva os quatro primeiros a cada build; ver tools/build-nomount.sh).
 #
 # Nao roda a parte de empacotamento/publicacao do build.sh (zips na raiz e no SD).
 set -euo pipefail
@@ -59,7 +69,13 @@ echo ">> KBUILD_BUILD_USER=$B_USER HOST=$B_HOST VERSION=$B_VERS TIMESTAMP=$B_TS"
 
 BUILD_CROSS_COMPILE=$KDIR/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
 KERNEL_LLVM_BIN=$KDIR/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
-if command -v ccache >/dev/null 2>&1; then REAL_CC="ccache $KERNEL_LLVM_BIN"; else REAL_CC=$KERNEL_LLVM_BIN; fi
+# Mesma regra do build.sh: ccache quebra o link com CONFIG_DEBUG_INFO=y.
+if command -v ccache >/dev/null 2>&1 &&
+   ! grep -q '^CONFIG_DEBUG_INFO=y' "$KDIR/arch/$ARCH/configs/wirus_defconfig"; then
+	REAL_CC="ccache $KERNEL_LLVM_BIN"
+else
+	REAL_CC=$KERNEL_LLVM_BIN
+fi
 
 # Mesmos MAKE_ARGS do build.sh
 MAKE_ARGS=(
@@ -76,7 +92,10 @@ MAKE_ARGS=(
 )
 export KBUILD_BUILD_USER=$B_USER KBUILD_BUILD_HOST=$B_HOST
 export KBUILD_BUILD_VERSION=$B_VERS KBUILD_BUILD_TIMESTAMP=$B_TS
-export CCACHE_RECACHE=1
+if [ "${RECACHE:-0}" = 1 ]; then
+	echo ">> RECACHE=1: ccache sem reaproveitar objeto (CCACHE_RECACHE=1)"
+	export CCACHE_RECACHE=1
+fi
 
 make "${MAKE_ARGS[@]}" wirus_defconfig
 nice make -j"$JOBS" "${MAKE_ARGS[@]}"
@@ -84,13 +103,25 @@ nice make -j"$JOBS" "${MAKE_ARGS[@]}"
 REL=$(cat "$OUT/include/config/kernel.release")
 [ "$REL" = "4.19.113-$VERSION" ] || { echo "!! kernel.release inesperado: $REL" >&2; exit 1; }
 
-# Comparacao com a Image da release
+# Comparacao com a Image da release (fatal fora das regioes esperadas)
 zcat "$OUT/arch/$ARCH/boot/Image.gz-dtb" > "$WORK/repro.Image" 2>/dev/null || true
-echo ">> Image release: $(stat -c %s "$WORK/release.Image") B, repro: $(stat -c %s "$WORK/repro.Image") B"
-cmp -l "$WORK/release.Image" "$WORK/repro.Image" > "$WORK/cmp.txt" || true
+S_REL=$(stat -c %s "$WORK/release.Image") S_REP=$(stat -c %s "$WORK/repro.Image")
+echo ">> Image release: $S_REL B, repro: $S_REP B"
+cmp -l "$WORK/release.Image" "$WORK/repro.Image" > "$WORK/cmp.txt" 2>/dev/null || true
 echo ">> bytes diferentes: $(wc -l < "$WORK/cmp.txt") (lista em $WORK/cmp.txt)"
+FAIL=
+[ "$S_REL" = "$S_REP" ] || { echo "!! tamanhos diferentes" >&2; FAIL=1; }
+"$(dirname "$(readlink -f "$0")")/image-cmp-check.py" "$OUT/vmlinux" "$WORK/cmp.txt" || FAIL=1
+if [ -n "$FAIL" ]; then
+	echo "!! a Image reproduzida NAO e a da release $VER: nada salvo em $SAVE." >&2
+	echo "!! Causas provaveis: objeto corrompido no cache (bit flip de RAM), fonte ou" >&2
+	echo "!! toolchain diferente, ou KDIR fora do caminho da release. Refazer com:" >&2
+	echo "!!   RECACHE=1 $0 $VER clean" >&2
+	exit 1
+fi
 
 mkdir -p "$SAVE"
 cp -f "$OUT/Module.symvers" "$OUT/vmlinux" "$OUT/.config" "$SAVE/"
 cp -f "$WORK/cmp.txt" "$SAVE/image-cmp.txt"
-echo ">> salvos em $SAVE: Module.symvers vmlinux .config image-cmp.txt"
+printf '%s\n' "$LV" > "$SAVE/linux_version.txt"
+echo ">> salvos em $SAVE: Module.symvers vmlinux .config linux_version.txt image-cmp.txt"

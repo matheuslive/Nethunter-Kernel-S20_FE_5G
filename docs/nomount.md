@@ -8,17 +8,29 @@ um `nomount.ko` carregável por `insmod` na Image v4.11 **já gravada**, sem gra
 ## Como gerar
 
 ```sh
+# logo depois de um ./build.sh da versão (o out/ ainda é dela): direto
+tools/build-nomount.sh v4.12
+# release antiga, com o out/ já de outra versão: reproduzir antes
 JOBS=6 tools/repro-release.sh v4.11 clean   # out/ = a release v4.11, byte a byte
-tools/build-nomount.sh v4.11                # nomount.ko + nm em build/r8q/nomount/
+tools/build-nomount.sh v4.11                # nomount.ko + nm em build/r8q/v4.11/nomount/
 ```
 
+- O `build.sh` salva, a cada build, `Module.symvers`, `vmlinux`, `.config` e
+  `linux_version.txt` (a string `Linux version` da Image) em `build/r8q/<versão>/`. Por isso o
+  `build-nomount.sh` dispensa o repro enquanto o `out/` for daquela versão. Ele confere o
+  `kernel.release` do `out/` e avisa se o `out/Module.symvers` diverge do salvo.
 - `tools/repro-release.sh` lê os carimbos `KBUILD_BUILD_USER/HOST/VERSION/TIMESTAMP` da string
-  `Linux version` da Image no zip da release, compila **sem empacotar** (não manda zip para a
-  raiz nem para o SD), compara a Image com a do zip (`cmp -l`) e salva `Module.symvers`,
-  `vmlinux`, `.config` e `image-cmp.txt` em `build/r8q/<versão>/`. Com `clean`, apaga o `out/`
-  antes, e o ccache roda com `CCACHE_RECACHE=1` (recompila tudo, nada vem do cache, por causa
-  da suspeita de RAM do host). Tem de rodar no checkout principal: com `O=` o kbuild grava
-  caminhos absolutos (`__FILE__`), e a comparação byte a byte depende disso.
+  `Linux version` da Image no zip da release e compila **sem empacotar** (não manda zip para a
+  raiz nem para o SD). Desde 2026-11-01 usa o ccache, também com `clean`: minutos em vez de
+  ~25 min. A rede de segurança contra objeto corrompido no cache (suspeita de RAM do host) é a
+  comparação da Image com a do zip (`cmp -l`), que agora é **fatal**: o
+  `tools/image-cmp-check.py` aceita só o descriptor do GNU build-id (20 B na `.notes`) e os
+  dígitos da data dentro do `g_wlan_driver_version` do qcacld, as duas regiões achadas pelo
+  `out/vmlinux`. Qualquer outro byte, ou tamanho diferente, sai com erro e não salva nada.
+  `RECACHE=1` volta ao comportamento antigo (`CCACHE_RECACHE=1`, nada vem do cache). Com a
+  comparação limpa, salva os mesmos arquivos do `build.sh` mais o `image-cmp.txt`. Tem de rodar
+  no checkout principal: com `O=` o kbuild grava caminhos absolutos (`__FILE__`), e a
+  comparação byte a byte depende disso.
 - `tools/build-nomount.sh` clona o nomount em `tmp/nomount-src` (tag `v2.2.0` = `bf1847f`),
   aplica `tools/nomount-patches/*.patch` (hoje nenhum), compila como **módulo externo**
   (`M=`, `CONFIG_NOMOUNT=m`, sem symlink em `fs/` e sem mexer no fonte do kernel), gera o `nm`

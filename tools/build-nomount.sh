@@ -1,12 +1,17 @@
 #!/bin/bash
 #
 # Compila o nomount (github.com/maxsteeel/nomount) como modulo externo
-# (nomount.ko) contra o out/ de uma release reproduzida por
-# tools/repro-release.sh, e o CLI nm para arm64 com o NDK.
+# (nomount.ko) contra o out/ de uma versao (build.sh dela ou release
+# reproduzida por tools/repro-release.sh), e o CLI nm para arm64 com o NDK.
 #
 # Uso:
-#   tools/repro-release.sh v4.11 clean     # antes: out/ = a release gravada
 #   tools/build-nomount.sh [versao]        # padrao: v4.11
+#
+# O out/ tem de ser o build daquela versao. Logo depois de um ./build.sh dela
+# isso ja vale (o build.sh salva Module.symvers etc. em build/r8q/<versao>/);
+# para uma release antiga, reproduzir antes com tools/repro-release.sh <versao>
+# (com ccache, poucos minutos). O kernel.release do out/ e conferido, e um aviso
+# sai se o out/Module.symvers divergir do salvo da versao.
 #
 # Variaveis: KDIR (checkout do kernel, padrao o principal), NOMOUNT_REF
 # (padrao v2.2.0), NOMOUNT_GIT (padrao o GitHub), NDK.
@@ -39,6 +44,11 @@ DEST=${DEST:-$KDIR/build/$VARIANT/$VER/nomount}   # v4.11 ficou em build/r8q/nom
 
 REL=$(cat "$OUT/include/config/kernel.release")
 [ "$REL" = "4.19.113-$VERSION" ] || { echo "!! $OUT esta em $REL, nao $VER (rode tools/repro-release.sh $VER)" >&2; exit 1; }
+SYMVERS=$KDIR/build/$VARIANT/$VER/Module.symvers
+if [ -f "$SYMVERS" ] && ! cmp -s "$SYMVERS" "$OUT/Module.symvers"; then
+	echo ">> aviso: $OUT/Module.symvers diverge do salvo em $SYMVERS"
+	echo ">>   (o out/ nao e o build salvo de $VER; os CRCs sao conferidos contra o salvo)"
+fi
 
 # Fonte do nomount, limpo, no ref pedido, com os patches locais
 [ -d "$SRC/.git" ] || git clone -q "$NOMOUNT_GIT" "$SRC"
@@ -77,7 +87,6 @@ cp -f "$SRC/kernel/src/nomount.ko" "$DEST/nomount.ko"
 cat "$DEST/md5.txt" "$DEST/modinfo.txt"
 
 # CRCs que o .ko importa (__versions) x Module.symvers salvo da release
-SYMVERS=$KDIR/build/$VARIANT/$VER/Module.symvers
 if [ -f "$SYMVERS" ]; then
 	/sbin/modprobe --dump-modversions "$DEST/nomount.ko" > "$DEST/modversions.txt"
 	awk 'NR==FNR { crc[$2] = $1; next }

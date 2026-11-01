@@ -6,6 +6,7 @@
 #   out/              objdir do kbuild (~6 GB)
 #   out/AnyKernel3/   copia de trabalho do template AnyKernel3/ (recriada a cada build)
 #   build/<variant>/  entregaveis: zip flashavel, dtb.img, dtbo.img e os modulos
+#   build/<variant>/<versao>/  Module.symvers, vmlinux, .config, linux_version.txt
 #
 # Uso:
 #   ./build.sh          build incremental + empacota o zip
@@ -95,6 +96,19 @@ if [ ! -e "$OUT/arch/$ARCH/boot/Image.gz-dtb" ]; then
 	echo "!! Image.gz-dtb nao foi gerada" >&2
 	exit 1
 fi
+
+# Artefatos da release em build/<variant>/<versao>/ (os mesmos do
+# tools/repro-release.sh): com eles, um .ko externo (tools/build-nomount.sh)
+# compila contra esta versao sem reproduzir o build, enquanto o out/ for dela,
+# e os CRCs do MODVERSIONS ficam conferiveis depois. Um rebuild da mesma
+# versao sobrescreve (vale o ultimo build, que e o que se grava).
+SAVE=$DIST/${VERSION##*_}
+mkdir -p "$SAVE"
+cp -f "$OUT/Module.symvers" "$OUT/vmlinux" "$OUT/.config" "$SAVE/"
+strings "$OUT/vmlinux" > "$OUT/vmlinux.strings"   # sem pipe: grep -m1 + pipefail = SIGPIPE
+grep -m1 '^Linux version ' "$OUT/vmlinux.strings" > "$SAVE/linux_version.txt"
+rm -f "$OUT/vmlinux.strings"
+echo ">> salvos em $SAVE: Module.symvers vmlinux .config linux_version.txt"
 
 # Imagens de device tree
 mkdir -p "$DIST/modules"
