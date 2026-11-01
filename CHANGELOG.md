@@ -2,6 +2,7 @@
 
 ## 2026-11-01
 
+- **18:18 Alterado:** nomount v2.2.0 recompilado para a v4.12 (`tools/repro-release.sh v4.12 clean`: Image com 26 bytes de diferença, nenhum de código; 60/60 CRCs), saída por versão em `build/r8q/v4.12/nomount/`; instalado com o companion v4.12 e S20 reiniciado: v4.12 rodando, nomount assumiu 3 módulos, `dc_step_chg_*`/`batt_siop_*` presentes, AGE_STEP=2 reaplicado ([d660430](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/d660430c3), [docs/nomount.md](docs/nomount.md))
 - **16:46 Alterado:** v4.12 (`dc_step_chg_*` + `batt_siop_*`) buildada do zero e gravada no S20 com o Android ligado (md5 relido `d0986046…`; backup da v4.11 em `build/r8q/boot-v4.11-2026-11-01.img`), reboot com o usuário ([3a5a3c9b2](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/3a5a3c9b2625030c0799c22012f6705158047945))
 - **16:46 Corrigido:** `tools/flash-booted.sh` nomeava o backup com a versão do kernel NOVO (lia o `u/kernel` depois de trocá-lo) ([3a5a3c9b2](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/3a5a3c9b2625030c0799c22012f6705158047945))
 - **15:54 Implementado:** `batt_siop_*` pelo sysfs (10 tetos de corrente do SIOP por tipo de cabo, faixa validada, vale na hora; o 1800 fixo da carga com fio no SIOP passa a ler o `siop_charging_limit_current`), entra na v4.12 junto do dc step, não gravada ([abc2f79](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/abc2f795a), [docs/siop-sysfs.md](docs/siop-sysfs.md))
