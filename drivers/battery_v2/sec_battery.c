@@ -565,7 +565,11 @@ __visible_for_testing void sec_bat_get_charging_current_by_siop(struct sec_batte
 		}
 #endif
 		else {
-			max_charging_current = 1800; /* 1 step(70) */
+			/* Era o literal 1800, igual ao battery,siop_charging_limit_current
+			 * do DT (que o driver lia e nao usava); agora sai do pdata, para o
+			 * batt_siop_charging_limit_current do sysfs valer.
+			 */
+			max_charging_current = battery->pdata->siop_charging_limit_current; /* 1 step(70) */
 		}
 
 		/* do forced set charging current */

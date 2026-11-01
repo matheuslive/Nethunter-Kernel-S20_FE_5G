@@ -56,6 +56,18 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(siop_activated),
 	SEC_BATTERY_ATTR(siop_level),
 	SEC_BATTERY_ATTR(siop_event),
+	SEC_BATTERY_ATTR(batt_siop_input_limit_current),
+	SEC_BATTERY_ATTR(batt_siop_charging_limit_current),
+	SEC_BATTERY_ATTR(batt_siop_hv_input_limit_current),
+	SEC_BATTERY_ATTR(batt_siop_hv_input_limit_current_2nd),
+	SEC_BATTERY_ATTR(batt_input_current_by_siop_20),
+#if defined(CONFIG_DIRECT_CHARGING)
+	SEC_BATTERY_ATTR(batt_siop_apdo_charging_limit_current),
+#endif
+	SEC_BATTERY_ATTR(batt_siop_wireless_input_limit_current),
+	SEC_BATTERY_ATTR(batt_siop_wireless_charging_limit_current),
+	SEC_BATTERY_ATTR(batt_siop_hv_wireless_input_limit_current),
+	SEC_BATTERY_ATTR(batt_siop_hv_wireless_charging_limit_current),
 	SEC_BATTERY_ATTR(batt_charging_source),
 	SEC_BATTERY_ATTR(fg_reg_dump),
 	SEC_BATTERY_ATTR(fg_reset_cap),
@@ -282,6 +294,61 @@ void update_external_temp_table(struct sec_battery_info *battery, int temp[])
 	battery->pdata->temp_low_threshold_lpm = temp[6];
 	battery->pdata->temp_low_recovery_lpm = temp[7];
 
+}
+
+/* Tetos de corrente do SIOP (batt_siop_*): cada atributo aponta para um campo
+ * do pdata lido do device tree, que nao chega ao aparelho pelo AnyKernel.
+ * Todos sao usados como teto, "if (cur > teto) cur = teto", no
+ * sec_bat_get_charging_current_by_siop(), que so roda com siop_level < 100 (e
+ * nao no nivel 80 com fio). Com o SIOP travado em 100 eles nao fazem nada; a
+ * excecao e o batt_siop_hv_wireless_input_limit_current, que tambem limita a
+ * entrada no wireless em FULL/2nd (sec_bat_get_wireless_current), em qualquer
+ * nivel. Um valor acima do DT so afrouxa aquele degrau do SIOP: a corrente
+ * nunca passa da do cabo nem do max_input_current. Faixas: entrada
+ * 100..max_input_current (3000), carga 100..6000 e carga do direct charging
+ * 1000..6000 (a entrada e a metade e o PCA9468 nao regula abaixo de 500 mA).
+ * Fora disso, -EINVAL. Devolve NULL se o offset nao e deste bloco.
+ */
+static int *sec_bat_siop_curr(struct sec_battery_info *battery, int offset,
+		int *min, int *max)
+{
+	sec_battery_platform_data_t *pdata = battery->pdata;
+
+	*min = 100;
+	*max = pdata->max_input_current;
+	switch (offset) {
+	case BATT_SIOP_INPUT_LIMIT_CURRENT:
+		return &pdata->siop_input_limit_current;
+	case BATT_SIOP_HV_INPUT_LIMIT_CURRENT:
+		return &pdata->siop_hv_input_limit_current;
+	case BATT_SIOP_HV_INPUT_LIMIT_CURRENT_2ND:
+		return &pdata->siop_hv_input_limit_current_2nd;
+	case BATT_INPUT_CURRENT_BY_SIOP_20:
+		/* 0 = desligado (o driver so aplica se > 0) */
+		*min = 0;
+		return &pdata->input_current_by_siop_20;
+	case BATT_SIOP_WIRELESS_INPUT_LIMIT_CURRENT:
+		return &pdata->siop_wireless_input_limit_current;
+	case BATT_SIOP_HV_WIRELESS_INPUT_LIMIT_CURRENT:
+		return &pdata->siop_hv_wireless_input_limit_current;
+	}
+
+	*max = 6000;
+	switch (offset) {
+	case BATT_SIOP_CHARGING_LIMIT_CURRENT:
+		return &pdata->siop_charging_limit_current;
+#if defined(CONFIG_DIRECT_CHARGING)
+	case BATT_SIOP_APDO_CHARGING_LIMIT_CURRENT:
+		*min = 1000;
+		return &pdata->siop_apdo_charging_limit_current;
+#endif
+	case BATT_SIOP_WIRELESS_CHARGING_LIMIT_CURRENT:
+		return &pdata->siop_wireless_charging_limit_current;
+	case BATT_SIOP_HV_WIRELESS_CHARGING_LIMIT_CURRENT:
+		return &pdata->siop_hv_wireless_charging_limit_current;
+	}
+
+	return NULL;
 }
 
 ssize_t sec_bat_show_attrs(struct device *dev,
@@ -583,6 +650,15 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 			0);
 		break;
+	case BATT_SIOP_INPUT_LIMIT_CURRENT ... BATT_SIOP_HV_WIRELESS_CHARGING_LIMIT_CURRENT:
+	{
+		int min, max, *p = sec_bat_siop_curr(battery, offset, &min, &max);
+
+		if (!p)
+			return -EINVAL;
+		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", *p);
+		break;
+	}
 	case BATT_CHARGING_SOURCE:
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n",
 			battery->cable_type);
@@ -2152,6 +2228,21 @@ ssize_t sec_bat_store_attrs(
 			ret = count;
 		}
 		break;
+	case BATT_SIOP_INPUT_LIMIT_CURRENT ... BATT_SIOP_HV_WIRELESS_CHARGING_LIMIT_CURRENT:
+	{
+		/* Vale na hora: o refresh reroda o sec_bat_set_charging_current(),
+		 * que passa pelo SIOP de novo (so tem efeito com siop_level < 100).
+		 */
+		int min, max, *p = sec_bat_siop_curr(battery, offset, &min, &max);
+
+		if (!p || sscanf(buf, "%10d\n", &x) != 1 || x < min || x > max)
+			return -EINVAL;
+		*p = x;
+		dev_info(battery->dev, "%s: %s(%d)\n", __func__, attr->attr.name, x);
+		sec_bat_refresh_charging_current(battery);
+		ret = count;
+		break;
+	}
 	case BATT_CHARGING_SOURCE:
 		break;
 	case FG_REG_DUMP:
