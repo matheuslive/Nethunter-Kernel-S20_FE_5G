@@ -16,27 +16,24 @@
 
 ## Bateria / carga (kernel)
 
-### `#5` Decidir se o `AGE_STEP` fica em 0
-*média* — (2026-08-10) — o mecanismo esta validado e funciona (ver DONE), mas foi **revertido para 4** ao fim do teste, que e onde a celula estava. Deixar em `0` sobe a float de 4270 para 4380 mV e devolve capacidade, ao custo de acelerar o desgaste de uma celula que ja tem ~1706 ciclos e esta no ultimo degrau de age forecast justamente por isso — e um trade-off capacidade x longevidade que so o usuario decide. Se ficar em 0, conferir que o `service.sh` do modulo de bateria reaplica no boot
-
-### `#6` (opcional, v4.4) Expor por patch em C o que só existe no device tree
+### `#5` (opcional, v4.4) Expor por patch em C o que só existe no device tree
 *baixa* — swelling completo (~24 props: `swelling_high_temp_block/recov/current/topoff`, `low_temp_1st/2nd/3rd`, `drop_float_voltage`), `recharge_condition_vcell/soc`, `full_condition_*`, as correntes `siop_*` e o `dc_step_chg_*` (25 W). Nada disso tem sysfs, e o DTB não chega ao device — só override no `sec_battery_dt.c`. Junto valeria `CONFIG_PD_CHARGER_HV_DISABLE=y`, sem o qual o `pd_disable` existe mas o handler inteiro está fora do build. Levantado em 2026-08-08, não decidido. **A v4.5 estabeleceu a receita** (o `batt_age_step`): enum em `sec_battery_sysfs.h` + `SEC_BATTERY_ATTR` na mesma posição relativa do array + `show`/`store`, e wrapper público quando a função alvo é `__visible_for_testing` — o custo por parâmetro agora é baixo (adicionado 2026-08-08)
 
 ## Base do kernel / toolchain
 
-### `#7` Base do kernel — decisão parcial (2026-08-07):
+### `#6` Base do kernel — decisão parcial (2026-08-07):
 *baixa* — fica no Nethunter 4.19.113 por ora (boota, em uso). Porte de stable 113→325 para esta árvore **descartado** (medido, ver DONE). A rota de atualização, se um dia valer, é consertar o boot do `~/Android/not_samsung.sm8250-4.19` (4.19.325 + KSU), que já tem o source ACK e o mesmo suporte a dongle — o usuário já testou e **não boota no S20**. Diagnóstico barato disponível: `/proc/last_kmsg` (ramoops sec_debug, 2 MB, sobrevive ao reboot) aponta o culpado do boot falho. Custo: horas; se falhar não se perde nada (adicionado 2026-08-06, atualizado 2026-08-07)
 
-### `#8` ThinLTO: testado e DESCARTADO — so retomar com benchmark no aparelho
+### `#7` ThinLTO: testado e DESCARTADO — so retomar com benchmark no aparelho
 *baixa* — (2026-08-12) — builda (exit 0), mas o `text` fica **+0,2%**, ou seja, o LTO praticamente nao mexeu no codigo; residente +0,7% e `Image.gz-dtb` +4,4%. E custa **quatro mudancas acopladas**: linker do kernel inteiro trocado para `ld.lld`, `MODVERSIONS` desligado (mudanca de ABI), `-j3` obrigatorio (a RAM da workstation e disputada com as VMs do PVE) e build muito mais lento. O ganho de "3-5%" **nunca foi verificado** aqui, e tamanho nao mede velocidade — se um dia for retomado, o criterio de aceite tem que ser **benchmark no aparelho**. Mapa completo dos obstaculos (incluindo o bug de `genksyms` com `union __packed` que existe na arvore desde sempre e vira erro fatal sob LTO) na memoria do projeto. Build descartado e arvore limpa; o `wirus_defconfig` nunca foi tocado
 
-### `#9` Guardar o `Module.symvers` de cada release e ter um modo "só companion" no `build.sh`
+### `#8` Guardar o `Module.symvers` de cada release e ter um modo "só companion" no `build.sh`
 *baixa* — (2026-10-26) No USB/IP v4.11.1 não havia `Module.symvers` salvo da v4.11; a prova dos CRCs foi recompilar com os `KBUILD_BUILD_*` da v4.11 e comparar a Image byte a byte. Salvar `Module.symvers` (e o `vmlinux`) em `build/r8q/<versão>/` a cada build. Além disso, o `build.sh` publica o zip do kernel junto com o companion: para um companion novo sobre a mesma Image, a raiz e o SD receberiam um zip de kernel com bytes diferentes do gravado (o deploy foi feito à mão). Uma flag `--companion-only` resolveria. (2026-11-01) Parcial: o `tools/repro-release.sh <versão>` reproduz uma release sem empacotar e salva `Module.symvers`/`vmlinux`/`.config` em `build/r8q/<versão>/` (feito para a v4.11, no nomount); falta o `build.sh` salvar isso a cada build e a flag só-companion.
 
-### `#10` Descobrir por que o `/proc/config.gz` do S20 serve o config stock
+### `#9` Descobrir por que o `/proc/config.gz` do S20 serve o config stock
 *baixa* — (2026-11-01) Com a v4.11 rodando, o `config.gz` do aparelho tem 6980 linhas (o `r8q_eur_openx_defconfig`) e mostra `MODULE_SIG=y`, `MODULE_SIG_FORCE=y` e `SIG_KEY="certs/signing_key.pem"`. O `out/.config` diz `# CONFIG_MODULE_SIG is not set`, e na prática o `usbip-core.ko` sem assinatura carrega (S20FE_re, no nomount). O nosso build tem `IKCONFIG=y`/`IKCONFIG_PROC=y`, e não há bind mount em `/proc/mounts`. Falta achar quem troca o arquivo: `kernel/configs.c` ou `kernel/Makefile` da Samsung embutindo outro defconfig, ou algum init/módulo do device. Até lá, validar a config pelo `out/.config` e por runtime (memória `config-gz-stock-no-device`).
 
 ## Validação
 
-### `#11` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
+### `#10` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
 *validação* — (2026-10-24) — a v4.11 está gravada e rodando, e os atributos `rear_torch_ua`/`rear_torch_max_s` existem em `/sys/class/camera/flash/`, mas o LED ainda não foi aceso. O teste fica com a sessão que pediu o recurso: varredura de duty com o sensor de luz traseiro TCS3408 no escuro (5..50 % devem dar ~0,05..0,50 do degrau de 25 mA, com a correção de +10 µs por pulso), clamp em 1250 µA, degraus ≥ 25 mA, parada por `rear_flash`/câmera e o teto `rear_torch_max_s`. Avisar o usuário antes de acender o LED. Limitações conhecidas: o PWM para no suspend (abaixo de 25 mA com a tela apagada precisa de wakelock) e o modo EOL do tcs3407 falha se o PWM estiver ativo
