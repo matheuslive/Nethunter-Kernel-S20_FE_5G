@@ -51,3 +51,12 @@ tools/build-nomount.sh v4.11                # nomount.ko + nm em build/r8q/nomou
 O `insmod` no aparelho fica com quem pediu, com aprovação do usuário. O módulo mexe no VFS,
 e um erro nele pode derrubar o kernel. O módulo **não** entra no companion nem carrega no
 boot enquanto o teste manual não passar.
+
+## Validação no aparelho (2026-11-01)
+
+A S20FE_re testou o módulo no S20 com a v4.11 e o teste passou. O `insmod` carregou
+o módulo (`Key type nomount registered`) e o `nm version` respondeu 22 (50).
+Redirecionamento, injeção, whiteout e isolamento do UID 2000 funcionaram, e o
+`nm clear all` desfez tudo. Não houve Oops nem reboot. O módulo ficou carregado, sem
+`rmmod`. Detalhes em `~/Android/S20FE_re/docs/findings/2026-11-01-nomount.md`.
+Ele continua fora do companion até alguém pedir para carregá-lo no boot.
