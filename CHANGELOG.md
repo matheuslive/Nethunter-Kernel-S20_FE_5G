@@ -2,6 +2,7 @@
 
 ## 2026-11-01
 
+- **18:49 Alterado:** `docs/battery-sysfs.md` e `build.sh` dizem que o battctl vive no mod_companion do app Mod (só o nome, sem link: o repo dele é privado) ([6b192db](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/6b192dbce))
 - **18:44 Removido:** `packaging/magisk-battery/` (cópia legada do battctl, parada desde 2026-10-08) e o zip de bateria do `build.sh`; a doc do lado do kernel (atributos, o que exige a NetHunter, armadilhas, inclusive a da float ao subir o degrau de age) foi para [docs/battery-sysfs.md](docs/battery-sysfs.md) ([5bc2abf00](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/5bc2abf00))
 - **18:38 Validado:** `dc_step_chg_*` e `batt_siop_*` no aparelho com PPS 25 W: `iout` e teto APDO do SIOP mudam o `Ichg` na hora, valores inválidos dão `-EINVAL`; achado: subir o `batt_age_step` com cabo plugado não sobe a float do carregador até o próximo plug ([9aff11c07](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/9aff11c07), [DONE](DONE.md))
 - **18:25 Alterado:** `build.sh` salva `Module.symvers`/`vmlinux`/`.config`/`linux_version.txt` em `build/r8q/<versão>/` a cada build (o `build-nomount.sh` roda direto depois, sem repro); `repro-release.sh` aproveita o ccache (`RECACHE=1` = antigo) e a comparação da Image ficou fatal pelo `tools/image-cmp-check.py` (só build-id e data do qcacld, achados pelo vmlinux) ([dcbf685](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/dcbf685d1), [docs/nomount.md](docs/nomount.md))
