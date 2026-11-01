@@ -19,7 +19,8 @@
 #   tools/nomount-patches/*.patch e sao aplicados em ordem.
 # - nm: freestanding (syscalls proprias, _start proprio), mesmas flags do CI
 #   do nomount (zig cc), aqui com o clang do NDK.
-# - Saida: $KDIR/build/r8q/nomount/{nomount.ko,nm} + md5 + modinfo.
+# - Saida: $KDIR/build/r8q/<versao>/nomount/{nomount.ko,nm} + md5 + modinfo
+#   (DEST= muda; os da v4.11 ficaram em build/r8q/nomount/).
 set -euo pipefail
 
 VER=${1:-v4.11}
@@ -34,7 +35,7 @@ VARIANT=r8q
 VERSION=NetHunter_matheuslive_${VARIANT}_${VER}
 OUT=$KDIR/out
 SRC=$REPO/tmp/nomount-src
-DEST=$KDIR/build/$VARIANT/nomount
+DEST=${DEST:-$KDIR/build/$VARIANT/$VER/nomount}   # v4.11 ficou em build/r8q/nomount
 
 REL=$(cat "$OUT/include/config/kernel.release")
 [ "$REL" = "4.19.113-$VERSION" ] || { echo "!! $OUT esta em $REL, nao $VER (rode tools/repro-release.sh $VER)" >&2; exit 1; }
