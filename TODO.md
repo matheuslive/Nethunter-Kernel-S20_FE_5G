@@ -47,6 +47,9 @@
 ### `#14` Guardar o `Module.symvers` de cada release e ter um modo "só companion" no `build.sh`
 *baixa* — (2026-10-26) No USB/IP v4.11.1 não havia `Module.symvers` salvo da v4.11; a prova dos CRCs foi recompilar com os `KBUILD_BUILD_*` da v4.11 e comparar a Image byte a byte. Salvar `Module.symvers` (e o `vmlinux`) em `build/r8q/<versão>/` a cada build. Além disso, o `build.sh` publica o zip do kernel junto com o companion: para um companion novo sobre a mesma Image, a raiz e o SD receberiam um zip de kernel com bytes diferentes do gravado (o deploy foi feito à mão). Uma flag `--companion-only` resolveria. (2026-11-01) Parcial: o `tools/repro-release.sh <versão>` reproduz uma release sem empacotar e salva `Module.symvers`/`vmlinux`/`.config` em `build/r8q/<versão>/` (feito para a v4.11, no nomount); falta o `build.sh` salvar isso a cada build e a flag só-companion.
 
+### `#15` Descobrir por que o `/proc/config.gz` do S20 serve o config stock
+*baixa* — (2026-11-01) Com a v4.11 rodando, o `config.gz` do aparelho tem 6980 linhas (o `r8q_eur_openx_defconfig`) e mostra `MODULE_SIG=y`, `MODULE_SIG_FORCE=y` e `SIG_KEY="certs/signing_key.pem"`. O `out/.config` diz `# CONFIG_MODULE_SIG is not set`, e na prática o `usbip-core.ko` sem assinatura carrega (S20FE_re, no nomount). O nosso build tem `IKCONFIG=y`/`IKCONFIG_PROC=y`, e não há bind mount em `/proc/mounts`. Falta achar quem troca o arquivo: `kernel/configs.c` ou `kernel/Makefile` da Samsung embutindo outro defconfig, ou algum init/módulo do device. Até lá, validar a config pelo `out/.config` e por runtime (memória `config-gz-stock-no-device`).
+
 ## Validação
 
 ### `#13` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
