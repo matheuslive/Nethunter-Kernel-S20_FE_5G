@@ -283,6 +283,15 @@ enum {
 	BATT_DCHG_LIMIT_CURRENT,
 	BATT_DCHG_LIMIT_STATE,
 #endif
+#if defined(CONFIG_DIRECT_CHARGING)
+	/* tabelas do dc step (carga rapida de 25 W), sec_step_charging.c */
+	DC_STEP_CHG_VAL_IOUT,
+	DC_STEP_CHG_VAL_VFLOAT,
+	DC_STEP_CHG_COND_VOL,
+	DC_STEP_CHG_COND_SOC,
+	DC_STEP_CHG_COND_IIN,
+	DC_STEP_CHG_INFO,
+#endif
 };
 
 #endif /* __SEC_BATTERY_SYSFS_H */

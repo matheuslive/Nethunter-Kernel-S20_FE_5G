@@ -75,6 +75,7 @@ reaplica a cada boot.
 | `SIOP_LEVEL` + `SIOP_LOCK`, `WC_*`, `SKIP_SWELLING`, `SAFETY_TIMER`, `WDT_KICK_DISABLE`, `BATTERY_CYCLE` | ✅ | ✅ |
 | `FLOAT_VOLTAGE`, correntes, corrente de corte, limites térmicos, `WPC_TEMP_*` | ❌ | ✅ |
 | `AGE_STEP` (exige **v4.5+**) | ❌ | ✅ |
+| `dc_step_chg_*`, carga rápida de 25 W (v4.12+, sem chave no `battctl`) | ❌ | ✅ |
 
 ### SIOP e o `siop.sh` absorvido
 
@@ -123,6 +124,56 @@ Os `batt_tune_*` só são criados com `CONFIG_ENG_BATTERY_CONCEPT=y`, habilitado
 no `wirus_defconfig` a partir da v4.3. Sem eles o módulo instala e funciona,
 apenas com o conjunto reduzido — o `customize.sh` avisa qual dos dois casos é o
 seu.
+
+### Carga rápida de 25 W: `dc_step_chg_*` (kernel v4.12+, ainda sem chave no `battctl`)
+
+O *direct charging* (carregador PPS, cabo APDO) carrega em 3 passos que só
+existiam no device tree. A partir da v4.12 o kernel os expõe em
+`/sys/class/power_supply/battery/`. Cada atributo gravável lê e aceita
+**uma lista com um inteiro por passo** (3 no r8q), da linha do degrau de age
+atual:
+
+| Atributo | O que é | Fábrica (r8q, degrau 2) |
+|---|---|---|
+| `dc_step_chg_val_iout` | corrente de saída de cada passo (mA) | `5290 4090 3670` |
+| `dc_step_chg_val_vfloat` | float de cada passo (mV) | `4125 4250 4340`* |
+| `dc_step_chg_cond_vol` | tensão que passa ao próximo passo (mV) | `4125 4250 4270`** |
+| `dc_step_chg_cond_soc` | SOC que passa ao próximo passo (%) | `35 60 100` |
+| `dc_step_chg_cond_iin` | só leitura: corrente de entrada da troca (mA) | `2045 1835 0` |
+| `dc_step_chg_info` | só leitura: tipo, passo atual, valores e os do DT | — |
+
+\* O DT diz 4380 no último passo; o age forecast já o recorta para a float do
+degrau (4340 no degrau 2). \*\* O último valor das condições não é limiar de
+nada (não há passo depois); o 4270 é sobra de um recorte do degrau 4 no boot.
+
+```sh
+B=/sys/class/power_supply/battery
+cat $B/dc_step_chg_info
+echo "4000 3500 3000" > $B/dc_step_chg_val_iout   # carga rápida mais fria
+```
+
+Regras (o `write` devolve **`-EINVAL`** e não grava nada se um valor falhar;
+`-ENODEV` se o DT não trouxe a tabela):
+
+- **nunca acima da fábrica**: o teto é a cópia do DT tirada no boot, e
+  `vfloat`/`cond_vol` também não passam da float do degrau;
+- `iout` ≥ 2000 mA (o mínimo do direct charger) e não crescente entre passos;
+  gravar `iout` recalcula o `cond_iin` (`iout[i+1] / 2`, a conta do próprio
+  driver);
+- `vfloat` ≥ 4000 mV e não decrescente; `cond_vol` e `cond_soc` não
+  decrescentes;
+- `cond_vol[i]` ≤ `vfloat[i]` nos passos que trocam por tensão (senão o passo
+  nunca alcança a condição e trava ali): **para baixar os dois, grave
+  `cond_vol` primeiro; para subir, `vfloat` primeiro**.
+
+Com o carregador PPS plugado, a escrita vale **na hora** (o driver reescolhe
+o passo pelo mesmo caminho da troca de degrau de age); sem ele, no próximo
+plug. Os valores são da linha do degrau atual: escreva **depois** do
+`AGE_STEP`, porque trocar o degrau passa a usar a linha do novo degrau (com os
+valores de fábrica dela, recortados pela float). Nada persiste no reboot.
+
+A releitura ecoa exatamente o que foi gravado. O `battctl` ainda não tem
+chave para estes atributos (pendência no `TODO.md`).
 
 ## Armadilhas conhecidas
 

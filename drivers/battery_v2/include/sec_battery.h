@@ -823,6 +823,19 @@ extern void sec_step_charging_init(struct sec_battery_info *battery, struct devi
 extern bool sec_bat_check_step_charging(struct sec_battery_info *battery);
 #if defined(CONFIG_DIRECT_CHARGING)
 extern bool sec_bat_check_dc_step_charging(struct sec_battery_info *battery);
+/* sysfs dc_step_chg_* (tabelas da carga rapida de 25 W, sec_step_charging.c) */
+enum sec_dc_step_attr {
+	DC_STEP_ATTR_VAL_IOUT = 0,
+	DC_STEP_ATTR_VAL_VFLOAT,
+	DC_STEP_ATTR_COND_VOL,
+	DC_STEP_ATTR_COND_SOC,
+	DC_STEP_ATTR_COND_IIN,
+	DC_STEP_ATTR_INFO,
+};
+extern ssize_t sec_bat_dc_step_show(struct sec_battery_info *battery,
+		enum sec_dc_step_attr which, char *buf);
+extern ssize_t sec_bat_dc_step_store(struct sec_battery_info *battery,
+		enum sec_dc_step_attr which, const char *buf);
 #endif
 #if defined(CONFIG_BATTERY_AGE_FORECAST)
 void sec_bat_set_aging_info_step_charging(struct sec_battery_info *battery);

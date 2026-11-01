@@ -20,7 +20,7 @@ DEFCONFIG_NAME=wirus_defconfig
 CHIPSET_NAME=kona
 VARIANT=r8q
 ARCH=arm64
-VERSION=NetHunter_matheuslive_${VARIANT}_v4.11
+VERSION=NetHunter_matheuslive_${VARIANT}_v4.12-dcstep
 JOBS=${JOBS:-$(nproc)}
 
 OUT=$DIR/out
@@ -34,8 +34,8 @@ DTS_DIR=$OUT/arch/$ARCH/boot/dts
 # Versao dos modulos Magisk (versionCode tem que ser inteiro). O sufixo .N
 # marca companion novo sobre o MESMO kernel (vmlinux inalterado): v4.11.1
 # acrescenta os .ko de USB/IP, compilados contra a Image da v4.11 ja gravada.
-MOD_VERSION=v4.11.1
-MOD_VERSIONCODE=4111
+MOD_VERSION=v4.12-dcstep
+MOD_VERSIONCODE=4120
 
 # Toolchain versionado no proprio repo. O GCC 4.9 entra so como binutils
 # (as, ld, ar...) via CROSS_COMPILE; quem compila e o clang do REAL_CC.

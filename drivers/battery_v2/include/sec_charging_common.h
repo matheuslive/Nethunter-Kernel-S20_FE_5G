@@ -1092,6 +1092,14 @@ struct sec_battery_platform_data {
 
 	unsigned int **dc_step_chg_val_iout;
 	unsigned int **dc_step_chg_val_vfloat;
+	/* Copia do DT tirada no boot (sec_dc_step_snapshot_dt), antes de o age
+	 * forecast ou o sysfs mexerem nas tabelas: e o teto que o sysfs
+	 * dc_step_chg_* aceita. 2D achatadas em [age][step].
+	 */
+	unsigned int *dc_step_chg_cond_vol_dt;
+	unsigned int *dc_step_chg_cond_soc_dt;
+	unsigned int *dc_step_chg_val_iout_dt;
+	unsigned int *dc_step_chg_val_vfloat_dt;
 #endif
 #endif
 

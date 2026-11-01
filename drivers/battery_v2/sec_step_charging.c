@@ -458,6 +458,303 @@ check_dc_step_change:
 	return false;
 }
 
+/*
+ * sysfs dc_step_chg_* -- as tabelas da carga rapida de 25 W (direct charging
+ * PPS) so existiam no device tree, e o DTB nao chega ao aparelho pelo
+ * AnyKernel. Daqui saem os atributos de /sys/class/power_supply/battery/:
+ *
+ *   dc_step_chg_val_iout    corrente de saida de cada passo (mA)
+ *   dc_step_chg_val_vfloat  float de cada passo (mV)
+ *   dc_step_chg_cond_vol    tensao que troca de passo (mV)
+ *   dc_step_chg_cond_soc    SOC que troca de passo (%)
+ *   dc_step_chg_cond_iin    (so leitura) corrente de entrada que troca de
+ *                           passo; derivada: iout[i+1] / 2, a mesma conta do
+ *                           sec_bat_set_aging_info_step_charging()
+ *   dc_step_chg_info        (so leitura) tipo, passos, degrau, passo atual e
+ *                           os valores de fabrica da linha atual
+ *
+ * Cada gravavel le e escreve uma lista de dc_step_chg_step inteiros separados
+ * por espaco, so da linha do age_step atual (as 2D) -- trocar o batt_age_step
+ * depois passa a usar a linha do novo degrau, com os valores dela. A releitura
+ * ecoa exatamente o que foi escrito.
+ *
+ * Validacao (-EINVAL; nada e gravado se um valor falhar):
+ *   - nunca acima do DT de fabrica (copia tirada no boot, antes do age
+ *     forecast); vfloat e cond_vol tambem nunca acima da chg_float_voltage do
+ *     degrau, que o aging recortaria de qualquer jeito;
+ *   - iout >= 2000 mA (dchg_min_current do DT; abaixo disso o
+ *     sec_direct_charger avisa o ABC) e nao crescente entre passos;
+ *   - vfloat >= 4000 mV e nao decrescente; cond_vol e cond_soc nao
+ *     decrescentes (o ultimo valor das condicoes nao e limiar de nada);
+ *   - cond_vol[i] <= vfloat[i] nos passos que trocam por tensao: com a float
+ *     abaixo da condicao o passo nunca a alcancaria e travaria ali. Para baixar
+ *     as duas, grave cond_vol antes; para subir, vfloat antes.
+ * -ENODEV se o DT nao trouxe a tabela (bit ausente no dc_step_chg_type).
+ *
+ * Aplicacao: com um carregador PPS (cabo APDO) plugado, a escrita refaz o
+ * passo na hora pelo mesmo caminho do age forecast (reset + check, que
+ * reescolhe o passo inicial e reaplica corrente e float). Sem PPS so grava, e
+ * o sec_bat_set_charge() aplica no proximo plug. Sem lock contra o monitor
+ * work, como o resto deste driver: sao u32, no pior caso um tick le valores
+ * misturados.
+ */
+#define DC_STEP_MAX_STEPS		8
+#define DC_STEP_IOUT_MIN		2000	/* mA, SEC_DIRECT_CHG_MIN_IOUT */
+#define DC_STEP_VFLOAT_MIN		4000	/* mV */
+#define DC_STEP_COND_VOL_MIN		3500	/* mV */
+
+static unsigned int *sec_dc_step_dup_2d(unsigned int **src, int rows, int cols)
+{
+	unsigned int *dst;
+	int r;
+
+	if (!src)
+		return NULL;
+	dst = kcalloc(rows * cols, sizeof(*dst), GFP_KERNEL);
+	if (!dst)
+		return NULL;
+	for (r = 0; r < rows; r++)
+		memcpy(dst + r * cols, src[r], sizeof(*dst) * cols);
+	return dst;
+}
+
+static void sec_dc_step_snapshot_dt(struct sec_battery_info *battery)
+{
+	sec_battery_platform_data_t *pdata = battery->pdata;
+	int n = battery->dc_step_chg_step, rows = pdata->num_age_step;
+
+	if (n <= 0 || n > DC_STEP_MAX_STEPS || rows <= 0)
+		return;
+	if ((battery->dc_step_chg_type & STEP_CHARGING_CONDITION_VOLTAGE) &&
+			pdata->dc_step_chg_cond_vol)
+		pdata->dc_step_chg_cond_vol_dt = kmemdup(pdata->dc_step_chg_cond_vol,
+			sizeof(unsigned int) * n, GFP_KERNEL);
+	if (battery->dc_step_chg_type &
+			(STEP_CHARGING_CONDITION_SOC | STEP_CHARGING_CONDITION_SOC_INIT_ONLY))
+		pdata->dc_step_chg_cond_soc_dt =
+			sec_dc_step_dup_2d(pdata->dc_step_chg_cond_soc, rows, n);
+	if (battery->dc_step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE)
+		pdata->dc_step_chg_val_vfloat_dt =
+			sec_dc_step_dup_2d(pdata->dc_step_chg_val_vfloat, rows, n);
+	pdata->dc_step_chg_val_iout_dt =
+		sec_dc_step_dup_2d(pdata->dc_step_chg_val_iout, rows, n);
+}
+
+/* Linha do degrau atual de uma tabela (2D ou 1D) e o teto de fabrica dela. */
+static int sec_dc_step_row(struct sec_battery_info *battery,
+		enum sec_dc_step_attr which, unsigned int **row, unsigned int **dt)
+{
+	sec_battery_platform_data_t *pdata = battery->pdata;
+	int n = battery->dc_step_chg_step, age = pdata->age_step;
+	unsigned int type = battery->dc_step_chg_type;
+
+	*row = NULL;
+	*dt = NULL;
+	if (!type || n <= 0 || n > DC_STEP_MAX_STEPS ||
+			age < 0 || age >= pdata->num_age_step)
+		return -ENODEV;
+
+	switch (which) {
+	case DC_STEP_ATTR_VAL_IOUT:
+		if (pdata->dc_step_chg_val_iout && pdata->dc_step_chg_val_iout_dt) {
+			*row = pdata->dc_step_chg_val_iout[age];
+			*dt = pdata->dc_step_chg_val_iout_dt + age * n;
+		}
+		break;
+	case DC_STEP_ATTR_VAL_VFLOAT:
+		if ((type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE) &&
+				pdata->dc_step_chg_val_vfloat_dt) {
+			*row = pdata->dc_step_chg_val_vfloat[age];
+			*dt = pdata->dc_step_chg_val_vfloat_dt + age * n;
+		}
+		break;
+	case DC_STEP_ATTR_COND_VOL:
+		if ((type & STEP_CHARGING_CONDITION_VOLTAGE) &&
+				pdata->dc_step_chg_cond_vol_dt) {
+			*row = pdata->dc_step_chg_cond_vol;
+			*dt = pdata->dc_step_chg_cond_vol_dt;
+		}
+		break;
+	case DC_STEP_ATTR_COND_SOC:
+		if ((type & (STEP_CHARGING_CONDITION_SOC |
+				STEP_CHARGING_CONDITION_SOC_INIT_ONLY)) &&
+				pdata->dc_step_chg_cond_soc_dt) {
+			*row = pdata->dc_step_chg_cond_soc[age];
+			*dt = pdata->dc_step_chg_cond_soc_dt + age * n;
+		}
+		break;
+	case DC_STEP_ATTR_COND_IIN:
+		if ((type & STEP_CHARGING_CONDITION_INPUT_CURRENT) &&
+				pdata->dc_step_chg_cond_iin) {
+			*row = pdata->dc_step_chg_cond_iin;
+			*dt = pdata->dc_step_chg_cond_iin;
+		}
+		break;
+	default:
+		return -EINVAL;
+	}
+	return *row ? 0 : -ENODEV;
+}
+
+static int sec_dc_step_print(char *buf, int len, const unsigned int *v, int n)
+{
+	int i, k = 0;
+
+	for (i = 0; i < n; i++)
+		k += scnprintf(buf + k, len - k, "%s%u", i ? " " : "", v[i]);
+	return k;
+}
+
+ssize_t sec_bat_dc_step_show(struct sec_battery_info *battery,
+		enum sec_dc_step_attr which, char *buf)
+{
+	sec_battery_platform_data_t *pdata = battery->pdata;
+	int n = battery->dc_step_chg_step, age = pdata->age_step, k = 0, ret;
+	unsigned int *row, *dt;
+	static const struct {
+		enum sec_dc_step_attr which;
+		const char *name;
+	} tabs[] = {
+		{ DC_STEP_ATTR_VAL_IOUT, "iout" },
+		{ DC_STEP_ATTR_VAL_VFLOAT, "vfloat" },
+		{ DC_STEP_ATTR_COND_VOL, "cond_vol" },
+		{ DC_STEP_ATTR_COND_SOC, "cond_soc" },
+		{ DC_STEP_ATTR_COND_IIN, "cond_iin" },
+	};
+	int t;
+
+	if (which != DC_STEP_ATTR_INFO) {
+		ret = sec_dc_step_row(battery, which, &row, &dt);
+		if (ret)
+			return ret;
+		k = sec_dc_step_print(buf, PAGE_SIZE, row, n);
+		k += scnprintf(buf + k, PAGE_SIZE - k, "\n");
+		return k;
+	}
+
+	k += scnprintf(buf + k, PAGE_SIZE - k,
+		"type=0x%x steps=%d age_step=%d step=%d\n",
+		battery->dc_step_chg_type, n, age, battery->step_charging_status);
+	k += scnprintf(buf + k, PAGE_SIZE - k,
+		"charge_power=%u iin_check_cnt=%d float=%d\n",
+		battery->dc_step_chg_charge_power,
+		pdata->dc_step_chg_iin_check_cnt, pdata->chg_float_voltage);
+	for (t = 0; t < ARRAY_SIZE(tabs); t++) {
+		if (sec_dc_step_row(battery, tabs[t].which, &row, &dt))
+			continue;
+		k += scnprintf(buf + k, PAGE_SIZE - k, "%s=", tabs[t].name);
+		k += sec_dc_step_print(buf + k, PAGE_SIZE - k, row, n);
+		if (dt != row) {
+			k += scnprintf(buf + k, PAGE_SIZE - k, " dt=");
+			k += sec_dc_step_print(buf + k, PAGE_SIZE - k, dt, n);
+		}
+		k += scnprintf(buf + k, PAGE_SIZE - k, "\n");
+	}
+	return k;
+}
+
+static int sec_dc_step_parse(const char *buf, unsigned int *v, int n)
+{
+	int i, val, used;
+
+	for (i = 0; i < n; i++) {
+		if (sscanf(buf, "%d%n", &val, &used) != 1 || val < 0)
+			return -EINVAL;
+		v[i] = val;
+		buf += used;
+	}
+	while (*buf == ' ' || *buf == '\t' || *buf == '\n')
+		buf++;
+	return *buf ? -EINVAL : 0;
+}
+
+ssize_t sec_bat_dc_step_store(struct sec_battery_info *battery,
+		enum sec_dc_step_attr which, const char *buf)
+{
+	sec_battery_platform_data_t *pdata = battery->pdata;
+	int n = battery->dc_step_chg_step, age, i, ret;
+	unsigned int v[DC_STEP_MAX_STEPS], *row, *dt, *other, *odt, cap;
+	unsigned int fv = pdata->chg_float_voltage;
+	bool by_vol = battery->dc_step_chg_type & STEP_CHARGING_CONDITION_VOLTAGE;
+	bool by_vf = battery->dc_step_chg_type & STEP_CHARGING_CONDITION_FLOAT_VOLTAGE;
+
+	if (which == DC_STEP_ATTR_COND_IIN || which == DC_STEP_ATTR_INFO)
+		return -EINVAL;
+	ret = sec_dc_step_row(battery, which, &row, &dt);
+	if (ret)
+		return ret;
+	ret = sec_dc_step_parse(buf, v, n);
+	if (ret)
+		return ret;
+	age = pdata->age_step;
+
+	for (i = 0; i < n; i++) {
+		cap = dt[i];
+		switch (which) {
+		case DC_STEP_ATTR_VAL_IOUT:
+			if (v[i] < DC_STEP_IOUT_MIN || v[i] > cap ||
+					(i && v[i] > v[i - 1]))
+				return -EINVAL;
+			break;
+		case DC_STEP_ATTR_VAL_VFLOAT:
+			if (fv > 0 && cap > fv)
+				cap = fv;
+			if (v[i] < DC_STEP_VFLOAT_MIN || v[i] > cap ||
+					(i && v[i] < v[i - 1]))
+				return -EINVAL;
+			/* a troca por tensao deste passo tem de ser alcancavel */
+			if (by_vol && i < n - 1 &&
+					!sec_dc_step_row(battery, DC_STEP_ATTR_COND_VOL,
+						&other, &odt) && other[i] > v[i])
+				return -EINVAL;
+			break;
+		case DC_STEP_ATTR_COND_VOL:
+			if (fv > 0 && cap > fv)
+				cap = fv;
+			if (v[i] < DC_STEP_COND_VOL_MIN || v[i] > cap ||
+					(i && i < n - 1 && v[i] < v[i - 1]))
+				return -EINVAL;
+			if (by_vf && i < n - 1 &&
+					!sec_dc_step_row(battery, DC_STEP_ATTR_VAL_VFLOAT,
+						&other, &odt) && v[i] > other[i])
+				return -EINVAL;
+			break;
+		case DC_STEP_ATTR_COND_SOC:
+			if (v[i] > 100 || v[i] > cap ||
+					(i && i < n - 1 && v[i] < v[i - 1]))
+				return -EINVAL;
+			break;
+		default:
+			return -EINVAL;
+		}
+	}
+
+	memcpy(row, v, sizeof(*v) * n);
+
+	if (which == DC_STEP_ATTR_VAL_IOUT &&
+			(battery->dc_step_chg_type & STEP_CHARGING_CONDITION_INPUT_CURRENT) &&
+			pdata->dc_step_chg_cond_iin) {
+		for (i = 0; i < n - 1; i++)
+			pdata->dc_step_chg_cond_iin[i] = v[i + 1] / 2;
+	}
+	if (which == DC_STEP_ATTR_VAL_VFLOAT) {
+		union power_supply_propval val;
+
+		val.intval = v[n - 1];
+		psy_do_property(pdata->charger_name, set,
+			POWER_SUPPLY_EXT_PROP_DIRECT_FLOAT_MAX, val);
+	}
+
+	pr_info("%s: attr(%d) age_step(%d) cable(%d) step(%d)\n", __func__,
+		which, age, battery->cable_type, battery->step_charging_status);
+
+	if (is_pd_apdo_wire_type(battery->cable_type)) {
+		sec_bat_reset_step_charging(battery);
+		sec_bat_check_dc_step_charging(battery);
+	}
+	return 0;
+}
+
 int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev)
 {
 	struct device_node *np = dev->of_node;
@@ -745,6 +1042,8 @@ int sec_dc_step_charging_dt(struct sec_battery_info *battery, struct device *dev
 		battery->pdata->main_cell_margin_cc = 100;
 	}
 #endif
+
+	sec_dc_step_snapshot_dt(battery);
 
 	return 0;
 

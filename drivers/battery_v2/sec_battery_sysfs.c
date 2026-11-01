@@ -261,6 +261,14 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(batt_dchg_limit_current),
 	SEC_BATTERY_ATTR(batt_dchg_limit_state),
 #endif
+#if defined(CONFIG_DIRECT_CHARGING)
+	SEC_BATTERY_ATTR(dc_step_chg_val_iout),
+	SEC_BATTERY_ATTR(dc_step_chg_val_vfloat),
+	SEC_BATTERY_ATTR(dc_step_chg_cond_vol),
+	SEC_BATTERY_ATTR(dc_step_chg_cond_soc),
+	SEC_BATTERY_ATTR(dc_step_chg_cond_iin),
+	SEC_BATTERY_ATTR(dc_step_chg_info),
+#endif
 };
 
 void update_external_temp_table(struct sec_battery_info *battery, int temp[])
@@ -1945,6 +1953,13 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		 * segurando a corrente agora. O batt_current_event nao tem esse bit.
 		 */
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%u\n", battery->chg_limit);
+		break;
+#endif
+#if defined(CONFIG_DIRECT_CHARGING)
+	case DC_STEP_CHG_VAL_IOUT ... DC_STEP_CHG_INFO:
+		/* a ordem do enum casa com a da enum sec_dc_step_attr */
+		i = sec_bat_dc_step_show(battery, (enum sec_dc_step_attr)(
+			DC_STEP_ATTR_VAL_IOUT + (offset - DC_STEP_CHG_VAL_IOUT)), buf);
 		break;
 #endif
 	default:
@@ -3960,6 +3975,15 @@ ssize_t sec_bat_store_attrs(
 		ret = count;
 		break;
 	case BATT_DCHG_LIMIT_STATE:
+		break;
+#endif
+#if defined(CONFIG_DIRECT_CHARGING)
+	case DC_STEP_CHG_VAL_IOUT ... DC_STEP_CHG_INFO:
+		/* -EINVAL/-ENODEV de verdade: o escritor sabe se pegou */
+		ret = sec_bat_dc_step_store(battery, (enum sec_dc_step_attr)(
+			DC_STEP_ATTR_VAL_IOUT + (offset - DC_STEP_CHG_VAL_IOUT)), buf);
+		if (!ret)
+			ret = count;
 		break;
 #endif
 	default:
