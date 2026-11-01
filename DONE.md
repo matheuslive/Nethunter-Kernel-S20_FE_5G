@@ -156,3 +156,6 @@ Validado com o PPS plugado (carga direta, `batt_charging_source`=38, passo 0, ~4
 ### `2026-11-01` Validar os `batt_siop_*` no aparelho
 v4.12: os 10 atributos ecoam o DT. Teste com o PPS: SIOP destravado por ~2 min (`chmod 0644 siop_level`, `siop_level` 99). O `by_siop` caiu para `chgcurr(2000)` (~2,2 A); com `batt_siop_apdo_charging_limit_current`=1500 caiu para `chgcurr(1500)` (~1,2 A), na hora. Volta ao `siop_level` 100 → 5290 mA / ~4,3 A, e o lock 0444 e o APDO 2000 foram restaurados. Recusados com `-EINVAL`: APDO 500 e 7000, input 50, charging 6500, texto. A integração no `battctl`/app Mod ficou no #6.
 
+### `2026-11-01` Integrar os `dc_step_chg_*` e os `batt_siop_*` no `battctl`/app Mod
+Feito no projeto Mod por filha de fora (commits `4f70733` + `6986036`, mod_companion v17). No battctl entraram as chaves `DC_STEP_IOUT/VFLOAT/COND_VOL/COND_SOC` (listas `a,b,c`, validadas contra o DT e a float do degrau, com `cond_vol`×`vfloat` aplicado em 3 escritas) e os 10 `SIOP_*`, além de `set` com vários pares e `unset`. Depois de `AGE_STEP`/`BATTERY_CYCLE`, o battctl regrava a float do charger pelo `batt_tune_float_voltage`, só com cabo e fora do swelling. No app Mod, card "Carga rápida (25 W)" em Energia › Carga. Instalado no S20 sem reboot e testado só na leitura. A validação com escrita real (PPS, fora do swelling) ficou no TODO do Mod.
+
