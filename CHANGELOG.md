@@ -2,6 +2,7 @@
 
 ## 2026-11-01
 
+- **14:14 Alterado:** `docs/nomount.md` com o teste de fumaça no S20 (insmod, redirecionamento, whiteout, sem Oops) ([84dce12](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/84dce12af))
 - **14:11 Incluído:** `tools/repro-release.sh` (reproduz uma release sem empacotar, compara a Image e salva `Module.symvers`/`vmlinux`) e `tools/build-nomount.sh` (nomount v2.2.0 como `.ko` externo e o CLI `nm` para a v4.11 gravada, sem patch, 60/60 CRCs) ([9d10a87](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/9d10a877e), [docs/nomount.md](docs/nomount.md))
 
 ## 2026-10-26
