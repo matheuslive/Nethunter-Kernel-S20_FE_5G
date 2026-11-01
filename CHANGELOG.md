@@ -2,6 +2,7 @@
 
 ## 2026-11-01
 
+- **15:14 Incluído:** `tools/otg-tx-test.sh` (AR9271 num netns próprio, associado à OpenWRT, `iperf3` em upload vigiando `overcurrent`); OTG em 1500 mA validado: 55 Mbit/s por 60 s sem sobrecorrente ([f5ba6b51e](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/f5ba6b51e848e102d0f4e7693b310dfab24c1f69))
 - **14:14 Alterado:** `docs/nomount.md` com o teste de fumaça no S20 (insmod, redirecionamento, whiteout, sem Oops) ([84dce12](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/84dce12af))
 - **14:11 Incluído:** `tools/repro-release.sh` (reproduz uma release sem empacotar, compara a Image e salva `Module.symvers`/`vmlinux`) e `tools/build-nomount.sh` (nomount v2.2.0 como `.ko` externo e o CLI `nm` para a v4.11 gravada, sem patch, 60/60 CRCs) ([9d10a87](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/9d10a877e), [docs/nomount.md](docs/nomount.md))
 
