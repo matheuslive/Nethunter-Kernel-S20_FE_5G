@@ -1,12 +1,12 @@
-# NetHunter Battery (r8q) — módulo Magisk
+# Bateria do r8q pelo sysfs — o que o kernel NetHunter expõe
 
-> **Legado (2026-10-08).** Substituído por outro módulo; este diretório não recebe mais mudanças.
-
-Tuning de carga do Galaxy S20 FE 5G pelo sysfs do driver `sec_battery`
-(`/sys/class/power_supply/battery/`), **system-less** e reversível.
-
-Módulo independente do `nethunter-companion`: pode ser instalado, desabilitado
-ou removido sozinho.
+O módulo Magisk que aplica estes ajustes no boot (`battctl`,
+`/data/adb/nethunter-battery.conf`) **não mora mais neste repo** desde
+2026-11-01: a cópia que ficava em `packaging/magisk-battery/` era legado
+desde 2026-10-08 e foi removida. Aqui fica a parte do kernel: o que cada
+atributo de `/sys/class/power_supply/battery/` faz, o que exige o kernel
+NetHunter e as armadilhas do driver `sec_battery`. As correntes do SIOP
+estão em [siop-sysfs.md](siop-sysfs.md).
 
 ## Por que via sysfs e não pelo device tree
 
@@ -18,54 +18,6 @@ stock**, e o AnyKernel não substitui essa seção — ou seja, editar `.dts` no
 kernel não chega ao aparelho. O que resta como superfície de controle é o
 sysfs, e é nele que este módulo trabalha.
 
-## Conteúdo
-
-| O quê | Onde no device |
-|---|---|
-| `battctl` (CLI) | `/system/bin/battctl` (magic mount) — **não `xbin`**, o Magisk 30700 não o monta |
-| Aplicação no boot | `service.sh` do módulo (late_start) |
-| Configuração | `/data/adb/nethunter-battery.conf` (fora do módulo) |
-| Log | `/data/adb/nethunter-battery.log` |
-
-A configuração fica em `/data/adb` de propósito: sobrevive a atualizar ou
-reinstalar o módulo, e o `customize.sh` nunca sobrescreve uma existente.
-
-### Formato da configuração
-
-O arquivo tem duas partes. O corpo é **template comentado** — documenta as
-chaves, as faixas e o efeito de cada uma, e não vale nada por si. O que vale
-fica numa seção no fim:
-
-```
-#FLOAT_VOLTAGE=4200          <- template: doc, sem efeito
-
-# === Configurado (o battctl escreve daqui para baixo) ===
-FULL_CAPACITY=80
-FAST_CURRENT=1800
-```
-
-`set` e `limit` gravam sempre nessa seção. Editar a seção à mão também
-funciona (rode `battctl apply` depois). Qualquer `apply` ou `set` normaliza o
-arquivo: linha ativa escrita no corpo migra para a seção, chave repetida
-colapsa numa só (vence a última) e espaços/comentário inline são limpos — ou
-seja, dá para ver de relance tudo o que está fora do padrão do device tree.
-
-## Uso
-
-```sh
-su
-battctl status              # carga, tensão, corrente, temp + parâmetros ativos
-battctl show                # chaves, faixas aceitas e a configuração atual
-battctl limit 80            # para de carregar em 80%, recarrega em 78%
-battctl set FLOAT_VOLTAGE 4200
-battctl charge off          # slate mode: corta a carga mantendo o link USB
-battctl apply               # reaplica o arquivo de configuração
-battctl reset               # desfaz o que é reversível sem reboot
-```
-
-`set` e `limit` gravam no arquivo **e** aplicam na hora; o `service.sh`
-reaplica a cada boot.
-
 ## O que exige o kernel NetHunter
 
 | Parâmetro | Kernel stock | NetHunter r8q v4.3+ |
@@ -75,7 +27,7 @@ reaplica a cada boot.
 | `SIOP_LEVEL` + `SIOP_LOCK`, `WC_*`, `SKIP_SWELLING`, `SAFETY_TIMER`, `WDT_KICK_DISABLE`, `BATTERY_CYCLE` | ✅ | ✅ |
 | `FLOAT_VOLTAGE`, correntes, corrente de corte, limites térmicos, `WPC_TEMP_*` | ❌ | ✅ |
 | `AGE_STEP` (exige **v4.5+**) | ❌ | ✅ |
-| `dc_step_chg_*`, carga rápida de 25 W (v4.12+, sem chave no `battctl`) | ❌ | ✅ |
+| `dc_step_chg_*`, carga rápida de 25 W, e `batt_siop_*` (v4.12+) | ❌ | ✅ |
 
 ### SIOP e o `siop.sh` absorvido
 
@@ -125,7 +77,7 @@ no `wirus_defconfig` a partir da v4.3. Sem eles o módulo instala e funciona,
 apenas com o conjunto reduzido — o `customize.sh` avisa qual dos dois casos é o
 seu.
 
-### Carga rápida de 25 W: `dc_step_chg_*` (kernel v4.12+, ainda sem chave no `battctl`)
+### Carga rápida de 25 W: `dc_step_chg_*` (kernel v4.12+)
 
 O *direct charging* (carregador PPS, cabo APDO) carrega em 3 passos que só
 existiam no device tree. A partir da v4.12 o kernel os expõe em
@@ -174,11 +126,18 @@ plug. Os valores são da linha do degrau atual: escreva **depois** do
 `AGE_STEP`, porque trocar o degrau passa a usar a linha do novo degrau (com os
 valores de fábrica dela, recortados pela float). Nada persiste no reboot.
 
-A releitura ecoa exatamente o que foi gravado. O `battctl` ainda não tem
-chave para estes atributos (pendência no `TODO.md`).
+A releitura ecoa exatamente o que foi gravado. Validado no aparelho em
+2026-11-01 com PPS de 25 W (o `Ichg` muda na checagem seguinte do driver).
 
 ## Armadilhas conhecidas
 
+- **Subir o degrau de age com o cabo plugado não sobe a float do carregador.**
+  O `sec_bat_set_aging_step()` só repassa a float nova ao charger se ela for
+  **menor** que a atual. Indo do degrau 3 (4320 mV) para o 2 (4340 mV) com o
+  PPS plugado, o carregador ficou em 4320 até o próximo plug (o primeiro
+  número do `fg_full_voltage` mostra o valor do charger). No boot isso não
+  aparece, porque o plug reaplica a float. Corrigir na hora gravando a float
+  do degrau em `batt_tune_float_voltage` (visto 2026-11-01).
 - **`INPUT_CURRENT`/`FAST_CURRENT` desligam o step charging.** Escrever nesses
   atributos liga as flags `test_max_current`/`test_charge_current` do driver, e
   `sec_step_charging.c` passa a retornar cedo. A carga vira corrente constante
