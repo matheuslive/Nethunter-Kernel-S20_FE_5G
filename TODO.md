@@ -1,50 +1,45 @@
 # TODO
 
-## Dongle USB WiFi / monitor mode (OTG)
-
-### `#1` Validar o OTG em 1500 mA com dongle plugado
-*média* — a v4.3 subiu o `OTG_ILIM` do max77705 de 900 para 1500 mA nos três pontos que escrevem o registrador. O teste é capturar em TX com o dongle e ver se some o `NOTIFY_EVENT_OVERCURRENT` do `dmesg` que derrubava o OTG. Depende do adaptador físico (mesmo bloqueio do item do monitor mode) (adicionado 2026-08-08)
-
 ## Consumo / standby / desempenho
 
-### `#2` Medir a v4.7 contra as baselines (unica coisa que falta das duas ondas)
+### `#1` Medir a v4.7 contra as baselines (unica coisa que falta das duas ondas)
 *média* — (2026-08-11, consolidado 2026-08-13) — a v4.7 esta validada e rodando; falta so **acumular 24-48 h de uso** e repetir a captura para comparar com `docs/baseline/v4.4-*` (sem otimizacao) e `v4.6-*` (primeira onda, capturada com ~15 h antes de gerar a v4.7). Criterios: (a) razao **system/user** do `Total cpu time` do batterystats, para carga parecida — o numero mais direto do efeito dos debugs de hot path; na v4.4 o UID 0 fechou `u=18m13s` contra `s=1h10m17s` em 3 h 22 min; (b) residencia de frequencia por `time_in_state` (existe desde a v4.6); (c) `compact_stall`/`compact_fail` e `pgmajfault` do `/proc/vmstat`, agora que o THP parou de tentar alocar a esmo (`thp_fault_fallback` saiu de 231.983 para 0). ⚠️ Cuidados do README da baseline: contadores do kernel zeram no boot e batterystats zera na carga (janelas diferentes, nao misturar), e a baseline da v4.4 foi tirada com a tela ligada **89,2% do tempo**, entao so vale comparar contra uso semelhante
 
-### `#3` Desativar a deteccao de atividade do Google
+### `#2` Desativar a deteccao de atividade do Google
 *média* — (2026-08-13) — o `com.google.android.gms` e o maior gerador de wakeups por alarme: **1217 no total, dos quais 719 sao do `*walarm*:com.google.android.location.ALARM_WAKEUP_ACTIVITY_DETECTION`** (medido na v4.7, `dumpsys alarm`, 35 h de uptime). E o reconhecimento de atividade fisica (andando/correndo/dirigindo), que roda em background e acorda o aparelho periodicamente. Onde desligar: revogar a permissao **"Atividade fisica"** do Google Play Services (Configuracoes > Apps > Google Play Services > Permissoes), e/ou Configuracoes > Localizacao > Servicos de localizacao. **Verificar o efeito depois:** `dumpsys alarm | grep -A3 "Top Alarms"` — o `ALARM_WAKEUP_ACTIVITY_DETECTION` deve sumir do topo, e os wakeups do GMS devem cair de ~1217 para perto de 500. ⚠️ Conferir se algo que voce usa depende disso (contagem de passos do Google Fit, deteccao de direcao do Maps, automacoes do Bixby/Tasker que reajam a atividade) — se depender, o custo pode valer a pena. **Nada disso e kernel**
 
-### `#4` App `com.matheus.charger`: baixar a frequência do polling de bateria
+### `#3` App `com.matheus.charger`: baixar a frequência do polling de bateria
 *média* — o `ChargingNotificationService` (foreground service) varre `/sys/class/power_supply/battery/` **inteiro a 1,6 Hz**. Cada varredura dispara os `pr_info` do `sec_bat_show_attrs` e transações i2c ao MFC (que respondem `-6`, sem carregador wireless acoplado): 114 linhas/s de kmsg, que enchiam o ring buffer de 1 MB em **85 segundos**. Mitigado do lado do kernel na v4.4 (buffer para 4 MB), mas a correção real é no app: intervalo de 5–10 s e ler só os atributos usados, em vez do diretório todo (adicionado 2026-08-08)
 
-### `#5` Decidir o que fazer com o piso do little (culpado ja identificado)
+### `#4` Decidir o que fazer com o piso do little (culpado ja identificado)
 *baixa* — (2026-08-11) — e o `/vendor/bin/init.qcom.post_boot.sh`, bloco `"kona")`, linha 5233: `echo 691200 > .../policy0/scaling_min_freq`. **Nao e restricao de hardware** — escrever `300000` funciona, persiste (o script roda uma vez, no boot) e o little passa a usar 300/403/518/614 MHz na hora; medido ~4,5% de residencia nas 4 freqs baixas em ~20 min de uso leve. Trade-off: o 691200 e provavelmente deliberado da Qualcomm por latencia/jank na UI, entao remover troca energia por responsividade — nao e ganho gratis, precisa de teste de uso real. **Persistir exige `service.sh` do modulo Magisk** (roda depois do post_boot); mudar no kernel/defconfig nao adianta. **Decisao de 2026-08-11: nao mexer por ora** — o teste foi revertido e o aparelho esta no valor de fabrica (691200). Se um dia valer testar, o caminho e o `service.sh`, e o criterio de aceite tem que incluir jank/responsividade, nao so residencia de frequencia
 
 ## Bateria / carga (kernel)
 
-### `#6` Decidir se o `AGE_STEP` fica em 0
+### `#5` Decidir se o `AGE_STEP` fica em 0
 *média* — (2026-08-10) — o mecanismo esta validado e funciona (ver DONE), mas foi **revertido para 4** ao fim do teste, que e onde a celula estava. Deixar em `0` sobe a float de 4270 para 4380 mV e devolve capacidade, ao custo de acelerar o desgaste de uma celula que ja tem ~1706 ciclos e esta no ultimo degrau de age forecast justamente por isso — e um trade-off capacidade x longevidade que so o usuario decide. Se ficar em 0, conferir que o `service.sh` do modulo de bateria reaplica no boot
 
-### `#7` (opcional, v4.4) Expor por patch em C o que só existe no device tree
+### `#6` (opcional, v4.4) Expor por patch em C o que só existe no device tree
 *baixa* — swelling completo (~24 props: `swelling_high_temp_block/recov/current/topoff`, `low_temp_1st/2nd/3rd`, `drop_float_voltage`), `recharge_condition_vcell/soc`, `full_condition_*`, as correntes `siop_*` e o `dc_step_chg_*` (25 W). Nada disso tem sysfs, e o DTB não chega ao device — só override no `sec_battery_dt.c`. Junto valeria `CONFIG_PD_CHARGER_HV_DISABLE=y`, sem o qual o `pd_disable` existe mas o handler inteiro está fora do build. Levantado em 2026-08-08, não decidido. **A v4.5 estabeleceu a receita** (o `batt_age_step`): enum em `sec_battery_sysfs.h` + `SEC_BATTERY_ATTR` na mesma posição relativa do array + `show`/`store`, e wrapper público quando a função alvo é `__visible_for_testing` — o custo por parâmetro agora é baixo (adicionado 2026-08-08)
 
 ## Base do kernel / toolchain
 
-### `#8` Base do kernel — decisão parcial (2026-08-07):
+### `#7` Base do kernel — decisão parcial (2026-08-07):
 *baixa* — fica no Nethunter 4.19.113 por ora (boota, em uso). Porte de stable 113→325 para esta árvore **descartado** (medido, ver DONE). A rota de atualização, se um dia valer, é consertar o boot do `~/Android/not_samsung.sm8250-4.19` (4.19.325 + KSU), que já tem o source ACK e o mesmo suporte a dongle — o usuário já testou e **não boota no S20**. Diagnóstico barato disponível: `/proc/last_kmsg` (ramoops sec_debug, 2 MB, sobrevive ao reboot) aponta o culpado do boot falho. Custo: horas; se falhar não se perde nada (adicionado 2026-08-06, atualizado 2026-08-07)
 
-### `#9` ThinLTO: testado e DESCARTADO — so retomar com benchmark no aparelho
+### `#8` ThinLTO: testado e DESCARTADO — so retomar com benchmark no aparelho
 *baixa* — (2026-08-12) — builda (exit 0), mas o `text` fica **+0,2%**, ou seja, o LTO praticamente nao mexeu no codigo; residente +0,7% e `Image.gz-dtb` +4,4%. E custa **quatro mudancas acopladas**: linker do kernel inteiro trocado para `ld.lld`, `MODVERSIONS` desligado (mudanca de ABI), `-j3` obrigatorio (a RAM da workstation e disputada com as VMs do PVE) e build muito mais lento. O ganho de "3-5%" **nunca foi verificado** aqui, e tamanho nao mede velocidade — se um dia for retomado, o criterio de aceite tem que ser **benchmark no aparelho**. Mapa completo dos obstaculos (incluindo o bug de `genksyms` com `union __packed` que existe na arvore desde sempre e vira erro fatal sob LTO) na memoria do projeto. Build descartado e arvore limpa; o `wirus_defconfig` nunca foi tocado
 
-### `#10` Guardar o `Module.symvers` de cada release e ter um modo "só companion" no `build.sh`
+### `#9` Guardar o `Module.symvers` de cada release e ter um modo "só companion" no `build.sh`
 *baixa* — (2026-10-26) No USB/IP v4.11.1 não havia `Module.symvers` salvo da v4.11; a prova dos CRCs foi recompilar com os `KBUILD_BUILD_*` da v4.11 e comparar a Image byte a byte. Salvar `Module.symvers` (e o `vmlinux`) em `build/r8q/<versão>/` a cada build. Além disso, o `build.sh` publica o zip do kernel junto com o companion: para um companion novo sobre a mesma Image, a raiz e o SD receberiam um zip de kernel com bytes diferentes do gravado (o deploy foi feito à mão). Uma flag `--companion-only` resolveria. (2026-11-01) Parcial: o `tools/repro-release.sh <versão>` reproduz uma release sem empacotar e salva `Module.symvers`/`vmlinux`/`.config` em `build/r8q/<versão>/` (feito para a v4.11, no nomount); falta o `build.sh` salvar isso a cada build e a flag só-companion.
 
-### `#11` Descobrir por que o `/proc/config.gz` do S20 serve o config stock
+### `#10` Descobrir por que o `/proc/config.gz` do S20 serve o config stock
 *baixa* — (2026-11-01) Com a v4.11 rodando, o `config.gz` do aparelho tem 6980 linhas (o `r8q_eur_openx_defconfig`) e mostra `MODULE_SIG=y`, `MODULE_SIG_FORCE=y` e `SIG_KEY="certs/signing_key.pem"`. O `out/.config` diz `# CONFIG_MODULE_SIG is not set`, e na prática o `usbip-core.ko` sem assinatura carrega (S20FE_re, no nomount). O nosso build tem `IKCONFIG=y`/`IKCONFIG_PROC=y`, e não há bind mount em `/proc/mounts`. Falta achar quem troca o arquivo: `kernel/configs.c` ou `kernel/Makefile` da Samsung embutindo outro defconfig, ou algum init/módulo do device. Até lá, validar a config pelo `out/.config` e por runtime (memória `config-gz-stock-no-device`).
 
 ## Validação
 
-### `#12` Conferir no próximo reboot se o `service.sh` carrega o `ath9k_htc`
+### `#11` Conferir no próximo reboot se o `service.sh` carrega o `ath9k_htc`
 *validação* — com o dongle plugado antes do boot, ver se o `ath9k_htc` aparece em `/proc/modules` e a `wlan1` nasce sem replug. Em 2026-11-01 o módulo estava carregado, mas sem dar para separar o `service.sh` do hotplug do dongle (o `dmesg` só mostrava o probe no replug, aos 658 s)
 
-### `#13` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
+### `#12` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
 *validação* — (2026-10-24) — a v4.11 está gravada e rodando, e os atributos `rear_torch_ua`/`rear_torch_max_s` existem em `/sys/class/camera/flash/`, mas o LED ainda não foi aceso. O teste fica com a sessão que pediu o recurso: varredura de duty com o sensor de luz traseiro TCS3408 no escuro (5..50 % devem dar ~0,05..0,50 do degrau de 25 mA, com a correção de +10 µs por pulso), clamp em 1250 µA, degraus ≥ 25 mA, parada por `rear_flash`/câmera e o teto `rear_torch_max_s`. Avisar o usuário antes de acender o LED. Limitações conhecidas: o PWM para no suspend (abaixo de 25 mA com a tela apagada precisa de wakelock) e o modo EOL do tcs3407 falha se o PWM estiver ativo
