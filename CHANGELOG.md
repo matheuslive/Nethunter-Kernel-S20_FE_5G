@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-02
+
+- **18:05 Implementado:** `build.sh` arquiva cada zip (kernel e companion, com a versão no nome) em `/sdcard/ZIP/` e `<SD>/ZIP/` do S20, sem sobrescrever (nome igual com md5 diferente avisa e pula) e com md5 conferido ([20f9540](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/20f95402c))
+
 ## 2026-11-01
 
 - **18:49 Alterado:** `docs/battery-sysfs.md` e `build.sh` dizem que o battctl vive no mod_companion do app Mod (só o nome, sem link: o repo dele é privado) ([6b192db](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/6b192dbce))
