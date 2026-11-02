@@ -309,6 +309,33 @@ else
 	echo "!! S20 fora de alcance ($SD_HOST): zips nao foram para o SD" >&2
 fi
 
+# Arquivo historico de ZIPs (regra 2026-11-02): copia de cada zip, com a versao
+# no nome, em /sdcard/ZIP/ e em <SD>/ZIP/. Nunca sobrescreve (nome igual com
+# md5 diferente = versao nao foi incrementada: avisa e pula) e confere o md5.
+if [ -n "${SD_DIR:-}" ]; then
+	for z in "${ZIPS[@]}"; do
+		b=$(basename "$z")
+		case "$b" in *_v[0-9]*.zip) ;; *) b="${b%.zip}-$MOD_VERSION.zip" ;; esac
+		m=$(md5sum < "$z" | cut -d' ' -f1)
+		for d in /sdcard/ZIP "$SD_DIR/ZIP"; do
+			r=$(timeout 300 ssh -o ConnectTimeout=8 -o BatchMode=yes "$SD_HOST" \
+				"mkdir -p '$d'; f='$d/$b'
+				 if [ -e \"\$f\" ]; then
+					[ \"\$(md5sum < \"\$f\" | cut -d' ' -f1)\" = $m ] && echo igual || echo difere
+				 else
+					cat > \"\$f.part\" && [ \"\$(md5sum < \"\$f.part\" | cut -d' ' -f1)\" = $m ] &&
+						mv \"\$f.part\" \"\$f\" && echo ok || { rm -f \"\$f.part\"; echo falhou; }
+				 fi" < "$z" 2>/dev/null) || r=falhou
+			case $r in
+				ok) echo ">> ZIP/ : $d/$b ($m)" ;;
+				igual) echo ">> ZIP/ : $d/$b ja existe (md5 igual)" ;;
+				difere) echo "!! $d/$b ja existe com OUTRO md5 -- suba a versao; nao sobrescrevi" >&2 ;;
+				*) echo "!! copia para $d/$b falhou" >&2 ;;
+			esac
+		done
+	done
+fi
+
 echo
 echo ">> $(cat "$OUT/include/config/kernel.release")"
 echo ">> kernel   : $DIST/$VERSION.zip ($(du -h "$DIST/$VERSION.zip" | cut -f1))"
