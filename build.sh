@@ -9,8 +9,26 @@
 #   build/<variant>/<versao>/  Module.symvers, vmlinux, .config, linux_version.txt
 #
 # Uso:
-#   ./build.sh          build incremental + empacota o zip
-#   ./build.sh clean    apaga o objdir (forca build do zero na proxima vez)
+#   ./build.sh                   build incremental + empacota e publica os zips
+#   ./build.sh --companion-only  so o companion, sobre a Image JA GRAVADA (ver abaixo)
+#   ./build.sh clean             apaga o objdir (forca build do zero na proxima vez)
+#
+# --companion-only: companion novo (ex.: .ko a mais) sobre o kernel da versao
+# do VERSION, que ja esta gravado no aparelho. Roda o make e monta o companion
+# como sempre, mas NAO gera nem publica o zip do kernel (os bytes nao bateriam
+# com o gravado, pelo carimbo de data) e NAO toca build/<variant>/<versao>/.
+# Exige MOD_VERSION = <versao>.N (o sufixo e o que separa o nome em ZIP/) e o
+# Module.symvers salvo da release: as linhas de vmlinux do out/Module.symvers
+# tem de bater com ele, senao os .ko nao carregariam na Image gravada (erro
+# fatal). Sem o salvo, gerar com tools/repro-release.sh <versao>. Publica so o
+# companion; o zip do kernel atual continua na raiz e no SD (nao e podado).
+#
+# Variaveis: JOBS (-j do make); KDIR (arvore de fonte + toolchain do make,
+# padrao: a deste script) e OUT (objdir, padrao: $KDIR/out). O kbuild grava
+# caminhos absolutos nos .cmd: rodar contra o out/ de outro checkout so e
+# incremental com KDIR apontando para esse mesmo checkout (ex.: testar o
+# empacotamento de uma worktree com KDIR=<checkout> OUT=<checkout>/out).
+# SD_HOST (padrao root@s20): host da copia para o SD; um invalido nao publica.
 #
 set -euo pipefail
 
@@ -23,8 +41,10 @@ VARIANT=r8q
 ARCH=arm64
 VERSION=NetHunter_matheuslive_${VARIANT}_v4.12
 JOBS=${JOBS:-$(nproc)}
+KVER=${VERSION##*_}
 
-OUT=$DIR/out
+KDIR=$(readlink -f "${KDIR:-$DIR}")
+OUT=${OUT:-$KDIR/out}
 DIST=$DIR/build/$VARIANT
 AK3=$OUT/AnyKernel3
 MAG=$OUT/magisk
@@ -42,8 +62,8 @@ MOD_VERSIONCODE=4120
 # O Makefile deste kernel define CC = python scripts/gcc-wrapper.py $(REAL_CC),
 # e atribuicao em Makefile vence variavel de ambiente -- por isso exportar
 # CC/LD/AR/LLVM=1 aqui nao teria efeito nenhum, tem que ser via linha de comando.
-BUILD_CROSS_COMPILE=$DIR/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
-KERNEL_LLVM_BIN=$DIR/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
+BUILD_CROSS_COMPILE=$KDIR/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
+KERNEL_LLVM_BIN=$KDIR/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
 CLANG_TRIPLE=aarch64-linux-gnu-
 STRIP=${BUILD_CROSS_COMPILE}strip
 
@@ -55,30 +75,52 @@ STRIP=${BUILD_CROSS_COMPILE}strip
 # orfaos, e o link morre em
 #   rtl8812au/core/rtw_recv.o:(.debug_info+0x...): undefined reference to `.Linfo_string6102'
 if command -v ccache >/dev/null 2>&1 &&
-   ! grep -q '^CONFIG_DEBUG_INFO=y' "$DIR/arch/$ARCH/configs/$DEFCONFIG_NAME"; then
+   ! grep -q '^CONFIG_DEBUG_INFO=y' "$KDIR/arch/$ARCH/configs/$DEFCONFIG_NAME"; then
 	REAL_CC="ccache $KERNEL_LLVM_BIN"
 else
 	REAL_CC="$KERNEL_LLVM_BIN"
 fi
 
 MAKE_ARGS=(
-	-C "$DIR"
+	-C "$KDIR"
 	O="$OUT"
 	ARCH="$ARCH"
 	CROSS_COMPILE="$BUILD_CROSS_COMPILE"
 	REAL_CC="$REAL_CC"
 	CFP_CC="$KERNEL_LLVM_BIN"
 	CLANG_TRIPLE="$CLANG_TRIPLE"
-	DTC_EXT="$DIR/tools/dtc"
+	DTC_EXT="$KDIR/tools/dtc"
 	CONFIG_BUILD_ARM64_DT_OVERLAY=y
 	LOCALVERSION="-$VERSION"
 )
 
-if [ "${1:-}" = "clean" ]; then
-	echo ">> apagando $OUT"
-	rm -rf "$OUT"
-	exit 0
-fi
+SAVE=$DIST/$KVER
+COMPANION_ONLY=
+case "${1:-}" in
+	"") ;;
+	clean)
+		echo ">> apagando $OUT"
+		rm -rf "$OUT"
+		exit 0 ;;
+	--companion-only)
+		COMPANION_ONLY=1
+		# Antes do make: nao vale pagar o build para morrer depois.
+		case "$MOD_VERSION" in
+			"$KVER".[0-9]*) ;;
+			*)
+				echo "!! --companion-only exige MOD_VERSION=$KVER.N (esta $MOD_VERSION):" >&2
+				echo "!! sem o sufixo, o nome em ZIP/ colide com o companion da $KVER" >&2
+				exit 1 ;;
+		esac
+		if [ ! -f "$SAVE/Module.symvers" ]; then
+			echo "!! falta o Module.symvers salvo da $KVER: $SAVE/Module.symvers" >&2
+			echo "!! gere com: tools/repro-release.sh $KVER" >&2
+			exit 1
+		fi ;;
+	*)
+		echo "uso: $0 [clean | --companion-only]" >&2
+		exit 1 ;;
+esac
 
 # Os submodules em drivers/net/can sao obj-y: sem eles o build quebra no link.
 if [ -f .gitmodules ] && [ -z "$(ls -A drivers/net/can/can-isotp 2>/dev/null)" ]; then
@@ -96,24 +138,43 @@ if [ ! -e "$OUT/arch/$ARCH/boot/Image.gz-dtb" ]; then
 	exit 1
 fi
 
+# ABI do vmlinux = a da Image gravada? So as linhas de vmlinux contam: os .ko
+# novos acrescentam linhas com outro modulo na 3a coluna.
+if [ -n "$COMPANION_ONLY" ]; then
+	awk -F'\t' '$3 == "vmlinux"' "$SAVE/Module.symvers" | sort > "$OUT/symvers.release"
+	awk -F'\t' '$3 == "vmlinux"' "$OUT/Module.symvers" | sort > "$OUT/symvers.now"
+	if ! cmp -s "$OUT/symvers.release" "$OUT/symvers.now"; then
+		n=$(diff "$OUT/symvers.release" "$OUT/symvers.now" | grep -c '^[<>]' || true)
+		echo "!! ABI do vmlinux mudou: $n linhas de vmlinux diferem de $SAVE/Module.symvers" >&2
+		echo "!! (diff $OUT/symvers.release $OUT/symvers.now)" >&2
+		echo "!! os .ko nao carregariam na Image da $KVER gravada: regrave o kernel" >&2
+		echo "!! (nova versao no VERSION) ou volte o fonte ao da $KVER" >&2
+		exit 1
+	fi
+	echo ">> ABI do vmlinux igual a da $KVER ($(wc -l < "$OUT/symvers.now") simbolos)"
+	rm -f "$OUT/symvers.release" "$OUT/symvers.now"
+fi
+
 # Artefatos da release em build/<variant>/<versao>/ (os mesmos do
 # tools/repro-release.sh): com eles, um .ko externo (tools/build-nomount.sh)
 # compila contra esta versao sem reproduzir o build, enquanto o out/ for dela,
 # e os CRCs do MODVERSIONS ficam conferiveis depois. Um rebuild da mesma
-# versao sobrescreve (vale o ultimo build, que e o que se grava).
-SAVE=$DIST/${VERSION##*_}
-mkdir -p "$SAVE"
-cp -f "$OUT/Module.symvers" "$OUT/vmlinux" "$OUT/.config" "$SAVE/"
-strings "$OUT/vmlinux" > "$OUT/vmlinux.strings"   # sem pipe: grep -m1 + pipefail = SIGPIPE
-grep -m1 '^Linux version ' "$OUT/vmlinux.strings" > "$SAVE/linux_version.txt"
-rm -f "$OUT/vmlinux.strings"
-echo ">> salvos em $SAVE: Module.symvers vmlinux .config linux_version.txt"
-
-# Imagens de device tree
+# versao sobrescreve (vale o ultimo build, que e o que se grava). Em
+# --companion-only nada disso: sao os da Image gravada, e o dtb/dtbo tambem.
 mkdir -p "$DIST/modules"
-cat "$DTS_DIR"/vendor/qcom/*.dtb > "$DIST/dtb.img"
-mapfile -t DTBO_FILES < <(find "$DTS_DIR/samsung/" -name "${CHIPSET_NAME}-sec-${VARIANT}-*-r*.dtbo")
-"$DIR/tools/mkdtimg" create "$DIST/dtbo.img" --page_size=4096 "${DTBO_FILES[@]}"
+if [ -z "$COMPANION_ONLY" ]; then
+	mkdir -p "$SAVE"
+	cp -f "$OUT/Module.symvers" "$OUT/vmlinux" "$OUT/.config" "$SAVE/"
+	strings "$OUT/vmlinux" > "$OUT/vmlinux.strings"   # sem pipe: grep -m1 + pipefail = SIGPIPE
+	grep -m1 '^Linux version ' "$OUT/vmlinux.strings" > "$SAVE/linux_version.txt"
+	rm -f "$OUT/vmlinux.strings"
+	echo ">> salvos em $SAVE: Module.symvers vmlinux .config linux_version.txt"
+
+	# Imagens de device tree
+	cat "$DTS_DIR"/vendor/qcom/*.dtb > "$DIST/dtb.img"
+	mapfile -t DTBO_FILES < <(find "$DTS_DIR/samsung/" -name "${CHIPSET_NAME}-sec-${VARIANT}-*-r*.dtbo")
+	"$DIR/tools/mkdtimg" create "$DIST/dtbo.img" --page_size=4096 "${DTBO_FILES[@]}"
+fi
 
 # Coleta os modulos ANTES de mexer em $OUT/AnyKernel3|magisk|moddep (os tres
 # moram dentro do $OUT; um find posterior acharia as copias que acabamos de por
@@ -132,15 +193,18 @@ fi
 # So o zImage + o anykernel enxuto. Sem system/, vendor/, ramdisk-patch/,
 # patch.d/, modules/, ak_patches/ -- essas eram as "NetHunter additions" que
 # escreviam em particao read-only. O que ia nelas vai no modulo Magisk abaixo.
-rm -rf "$AK3"
-cp -a "$DIR/AnyKernel3" "$AK3"
-rm -rf "$AK3"/system "$AK3"/vendor "$AK3"/ramdisk-patch "$AK3"/patch.d \
-       "$AK3"/modules "$AK3"/ak_patches "$AK3"/.git
-cp -f "$DIR/packaging/anykernel-kernelonly.sh" "$AK3/anykernel.sh"
-cp -f "$OUT/arch/$ARCH/boot/Image.gz-dtb" "$AK3/zImage"
+# Em --companion-only o zip do kernel nao e refeito (vale o da release).
+if [ -z "$COMPANION_ONLY" ]; then
+	rm -rf "$AK3"
+	cp -a "$DIR/AnyKernel3" "$AK3"
+	rm -rf "$AK3"/system "$AK3"/vendor "$AK3"/ramdisk-patch "$AK3"/patch.d \
+	       "$AK3"/modules "$AK3"/ak_patches "$AK3"/.git
+	cp -f "$DIR/packaging/anykernel-kernelonly.sh" "$AK3/anykernel.sh"
+	cp -f "$OUT/arch/$ARCH/boot/Image.gz-dtb" "$AK3/zImage"
 
-rm -f "$DIST/$VERSION.zip"
-(cd "$AK3" && zip -qr9 "$DIST/$VERSION.zip" ./* -x README.md '*placeholder')
+	rm -f "$DIST/$VERSION.zip"
+	(cd "$AK3" && zip -qr9 "$DIST/$VERSION.zip" ./* -x README.md '*placeholder')
+fi
 
 # --- 2. Modulo Magisk companion (.ko + hid-keyboard + init HID) --------------
 rm -rf "$MAG"
@@ -246,10 +310,8 @@ rm -f "$DIST/nethunter-companion-$VARIANT.zip"
 # mod_companion do app Mod) e foi apagado; a doc do lado do kernel esta
 # em docs/battery-sysfs.md. O nethunter-battery-<variant>.zip segue no PRUNE
 # para sumir da raiz e do SD se ainda estiver la.
-ZIPS=(
-	"$DIST/$VERSION.zip"
-	"$DIST/nethunter-companion-$VARIANT.zip"
-)
+ZIPS=("$DIST/nethunter-companion-$VARIANT.zip")
+[ -n "$COMPANION_ONLY" ] || ZIPS=("$DIST/$VERSION.zip" "${ZIPS[@]}")
 
 # --- 4. Publica os zips: raiz do repo (symlink) e SD externo do S20 ----------
 #
@@ -262,25 +324,32 @@ ZIPS=(
 # O que a poda considera "build antiga": qualquer zip de kernel do variant
 # (pega tambem os de terceiros, como o Nethunter_WirusMOD -- dai a classe
 # [Nn]et[Hh]unter, que os dois estilos de maiuscula usam) e os dois zips de
-# modulo, exceto os que acabamos de gerar.
+# modulo, exceto os que acabamos de gerar e o zip do kernel da versao atual
+# (em --companion-only ele nao foi gerado, mas continua sendo o vigente).
 #
 # PRUNE fica SEM aspas nos dois "for" abaixo de proposito: e a expansao sem
 # aspas que sofre globbing. Entre aspas (ou vindo de "${array[@]/#/...}") o
 # padrao chegaria literal no rm.
 KEEP=$(printf '|%s' "${ZIPS[@]##*/}")   # "|a.zip|b.zip|c.zip"
-KEEP="$KEEP|"
+KEEP="$KEEP|$VERSION.zip|"
 PRUNE="[Nn]et[Hh]unter*_${VARIANT}_v*.zip nethunter-companion-${VARIANT}.zip nethunter-battery-${VARIANT}.zip"
 
 (
 	cd "$DIR"
 	shopt -s nullglob
 	for f in $PRUNE; do
+		[ -e "$f" ] || [ -L "$f" ] || continue   # nome sem curinga chega literal
 		case "$KEEP" in *"|$f|"*) continue ;; esac
 		rm -f "$f" && echo ">> podado da raiz: $f"
 	done
 )
-# Symlinks (ignorados pelo git); os da rodada anterior saem antes.
-find "$DIR" -maxdepth 1 -name '*.zip' -type l -delete
+# Symlinks (ignorados pelo git); os da rodada anterior saem antes, menos o do
+# kernel vigente em --companion-only.
+if [ -n "$COMPANION_ONLY" ]; then
+	find "$DIR" -maxdepth 1 -name '*.zip' -type l ! -name "$VERSION.zip" -delete
+else
+	find "$DIR" -maxdepth 1 -name '*.zip' -type l -delete
+fi
 for z in "${ZIPS[@]}"; do
 	ln -sfn "${z#"$DIR"/}" "$DIR/$(basename "$z")"
 done
@@ -338,6 +407,10 @@ fi
 
 echo
 echo ">> $(cat "$OUT/include/config/kernel.release")"
-echo ">> kernel   : $DIST/$VERSION.zip ($(du -h "$DIST/$VERSION.zip" | cut -f1))"
+if [ -n "$COMPANION_ONLY" ]; then
+	echo ">> kernel   : nao reempacotado (--companion-only); vale o $VERSION.zip gravado"
+else
+	echo ">> kernel   : $DIST/$VERSION.zip ($(du -h "$DIST/$VERSION.zip" | cut -f1))"
+fi
 echo ">> companion: $DIST/nethunter-companion-$VARIANT.zip ($(du -h "$DIST/nethunter-companion-$VARIANT.zip" | cut -f1))"
 echo ">> modulos  : $(ls "$DIST/modules" | tr '\n' ' ')"

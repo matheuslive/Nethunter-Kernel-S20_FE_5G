@@ -87,6 +87,11 @@ device USB remoto (`vhci-hcd`, aparece em `/sys/devices/platform/vhci_hcd.0`)
 quanto exportar um local (`usbip-host`). Os `.ko` foram compilados contra a Image
 da v4.11, sem mudar o vmlinux: não é preciso regravar o kernel.
 
+Companion novo sobre a MESMA Image (sufixo `.N` no `MOD_VERSION` do `build.sh`)
+sai com `./build.sh --companion-only`: confere que o vmlinux tem a mesma ABI da
+release gravada (`Module.symvers` salvo em `build/r8q/<versão>/`) e publica só o
+companion, sem refazer o zip do kernel.
+
 ```sh
 sudo wmon              # usa o dongle wlan1 (hopping)
 sudo wmon -c 6         # trava no canal 6
