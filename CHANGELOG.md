@@ -2,6 +2,7 @@
 
 ## 2026-11-02
 
+- **18:41 Implementado:** `build.sh --companion-only`: companion novo (MOD_VERSION `<versão>.N`) sobre a Image já gravada, sem reempacotar o kernel nem tocar em `build/r8q/<versão>/`; ABI do vmlinux conferida contra o `Module.symvers` salvo (fatal se divergir); KDIR/OUT sobrescrevíveis; a poda não reporta mais zip inexistente ([66f5a8d](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/66f5a8de4), [packaging/magisk/README](packaging/magisk/README.md))
 - **18:05 Implementado:** `build.sh` arquiva cada zip (kernel e companion, com a versão no nome) em `/sdcard/ZIP/` e `<SD>/ZIP/` do S20, sem sobrescrever (nome igual com md5 diferente avisa e pula) e com md5 conferido ([20f9540](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/20f95402c))
 
 ## 2026-11-01
