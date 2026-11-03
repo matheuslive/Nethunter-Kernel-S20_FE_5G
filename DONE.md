@@ -1,5 +1,8 @@
 # DONE
 
+### `2026-11-02` Descobrir por que o `/proc/config.gz` do S20 serve o config stock
+Causa: o `kernel/Makefile` da Samsung (desde o import do source G781BXXU1ATIG) gerava o `config_data.gz` a partir de `arch/arm64/configs/r8q_eur_openx_defconfig` fixo, em vez do `$(KCONFIG_CONFIG)` do upstream. Nada no device troca o arquivo. Corrigido para `$(KCONFIG_CONFIG)`; o `kernel/configs.o` regenerado tem `config_data.gz` idêntico ao `out/.config`. Vale a partir da próxima release do kernel (a v4.12 gravada continua servindo o stock).
+
 ### Build local funcional do kernel Nethunter (`4.19.113-Nethunter_WirusMOD_r8q_v4.1`): resolvidos deps do host (bison/flex/libelf-dev), submodules CAN, e o fix do `-Wunused-function` que o `gcc-wrapper.py` da QCOM tornava fatal
 2026-08-06 (commit cffff32f1)
 
