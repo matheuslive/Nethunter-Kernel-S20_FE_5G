@@ -28,6 +28,17 @@
 #include <linux/syscalls.h>
 #include <linux/sysctl.h>
 
+/*
+ * O filter_count (KernelSU-Next) mora no padding de struct seccomp: se um dia o
+ * tamanho ou o offset de "filter" mudar, o layout do task_struct muda junto e os
+ * .ko compilados contra a v4.12 passariam a ler campos errados.
+ */
+#ifdef CONFIG_64BIT
+_Static_assert(sizeof(struct seccomp) == 16 &&
+	       __builtin_offsetof(struct seccomp, filter) == 8,
+	       "struct seccomp: filter_count tem de caber no padding");
+#endif
+
 #ifdef CONFIG_HAVE_ARCH_SECCOMP_FILTER
 #include <asm/syscall.h>
 #endif

@@ -7613,3 +7613,16 @@ CONFIG_CORESIGHT_REMOTE_ETM=y
 CONFIG_CORESIGHT_REMOTE_ETM_DEFAULT_ENABLE=0
 CONFIG_CORESIGHT_TGU=y
 CONFIG_CORESIGHT_LINK_LATE_DISABLE=y
+
+#
+# KernelSU-Next legacy (non-GKI), submodulo KernelSU-Next/ na tag v3.4.0-legacy
+# (driver 33294 = manager KernelSU_Next_v3.4.0_33294). Hooks manuais em
+# fs/exec.c, open.c, stat.c, read_write.c, drivers/input/input.c e
+# kernel/reboot.c; setuid e rename pelo LSM. docs/kernelsu.md
+#
+CONFIG_KSU=y
+# CONFIG_KSU_DEBUG is not set
+# CONFIG_KSU_DISABLE_MANAGER is not set
+# CONFIG_KSU_DISABLE_POLICY is not set
+# CONFIG_KSU_ALLOWLIST_WORKAROUND is not set
+CONFIG_KSU_MANUAL_HOOK=y

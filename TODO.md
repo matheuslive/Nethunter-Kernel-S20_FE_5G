@@ -32,8 +32,54 @@
 ### `#7` ThinLTO: testado e DESCARTADO — so retomar com benchmark no aparelho
 *baixa* — (2026-08-12) — builda (exit 0), mas o `text` fica **+0,2%**, ou seja, o LTO praticamente nao mexeu no codigo; residente +0,7% e `Image.gz-dtb` +4,4%. E custa **quatro mudancas acopladas**: linker do kernel inteiro trocado para `ld.lld`, `MODVERSIONS` desligado (mudanca de ABI), `-j3` obrigatorio (a RAM da workstation e disputada com as VMs do PVE) e build muito mais lento. O ganho de "3-5%" **nunca foi verificado** aqui, e tamanho nao mede velocidade — se um dia for retomado, o criterio de aceite tem que ser **benchmark no aparelho**. Mapa completo dos obstaculos (incluindo o bug de `genksyms` com `union __packed` que existe na arvore desde sempre e vira erro fatal sob LTO) na memoria do projeto. Build descartado e arvore limpa; o `wirus_defconfig` nunca foi tocado
 
+## Otimizações dos kernels de terceiros (inventário, 2026-11-03)
+
+Levantado na tarefa do KernelSU (v4.13), **nada implementado**. Fontes: release notes dos
+kernels do r8q (ZenoKernel v2.0, Shadow, Wraith, QueenX; canal `t.me/r8q_dev`) e os commits do
+`notkernel-oss/not_samsung.sm8250-4.19` (`lineage-23.2..IT`, base de todos eles). Regras
+para qualquer item: medir contra as baselines de `docs/baseline/` (TODO `#1`; contadores
+zeram no boot e o batterystats na carga), e lembrar que o `init.qcom.post_boot.sh` reimpõe os
+tunables de cpufreq no boot (memória do projeto): default de kernel só vale se o script não
+mexe no mesmo atributo, senão o caminho é o `service.sh` de um módulo. O ThinLTO já foi
+testado e descartado (`#7`). Mudança que altere layout de struct muda CRCs: companion e
+nomount.ko se recompilam juntos.
+
+### `#8` Teto/undervolt de GPU (Zeno 910 MHz @ 390 mV, Shadow-OC/Wraith 840, QueenX 411–900, battkeeper 305–587)
+*baixa* — Origem: not `394e921ae6ab` (kona-v2-gpu.dtsi "Import not_kernel changes"), `58f38ac1e829` (`min_pwrlevel` fixo em 7), repos `Z3phery/queenX` e do Zeno (fenixistark). **Obstáculo:** a tabela é do DT, e o DT não chega ao aparelho pelo AnyKernel (o boot v2 usa a seção `dtb` stock; memória `dtb-nao-vai-pelo-anykernel`). Exigiria gravar a seção dtb do boot ou reescrever a tabela no driver kgsl em C. **Atalho sem kernel:** o lado bateria (teto à la battkeeper) sai em runtime por `/sys/class/kgsl/kgsl-3d0/max_pwrlevel`/`max_gpuclk` num `service.sh`, e dá para testar já. Risco: OC = calor e instabilidade (o Zeno recomenda cooler); UV = travamento da GPU sob carga. Medir: `gpu_clock_stats`/`gpubusy` do kgsl, temperatura (`thermal_zone*`), batterystats com carga de jogo/vídeo igual, e travamentos no `last_kmsg`
+
+### `#9` Schedutil "Sultan" / DVFS headroom / boost de CPU (Zeno; not)
+*baixa* — Origem: not `e482ce10af8a`, `1a447a610145`, `018a1eaef430`, `a1a934a58f02`, `44441270554f` (headroom capacity-aware, sem o 1,25 mágico, tunable de response time) e, no Zeno, o "HAL bypass via verify_within_limits" (Silver 300 MHz, Gold 1,8 GHz, Prime 2,42 GHz por 200 ms). **Atrito:** esta árvore usa WALT (`CONFIG_SCHED_WALT=y`) e o schedutil da Qualcomm, e o not trocou o WALT por PELT/CASS/uclamp (~400 commits), então os patches não entram isolados. O que é tunable o post_boot reimpõe. Risco: médio/alto (núcleo do scheduler; jank ou bateria). Medir: `time_in_state` por cluster, razão system/user do batterystats, `dumpsys gfxinfo` (para arquivo) em rolagem fixa
+
+### `#10` zram: compressor lz4/zstd e swappiness
+*baixa* — Origem: not (`CONFIG_ZRAM_DEF_COMP="lz4"`, 77 commits `zram:` importados da Samsung), QueenX (zram fixo em 8 GB, `swappiness=200`). Aqui só há `lzo`/`lzo-rle` (`# CONFIG_CRYPTO_LZ4/ZSTD is not set`); ligar `CRYPTO_LZ4`/`ZSTD` é só config, e a troca de algoritmo é por sysfs (`comp_algorithm`, antes do `disksize`) num script de boot. **Manter o `ZRAM_WRITEBACK`** (RAM Plus da One UI; o not não tem). Swappiness/tamanho são userspace (o Samsung `ss_*`/`vm.*` no boot), não kernel. Risco: baixo. Medir: `/proc/vmstat` (`pswpin`/`pswpout`, `pgmajfault`, `compact_stall`), `mm_stat` do zram (razão de compressão) e CPU do `kswapd0`
+
+### `#11` TCP BBR e fq/fq_codel
+*baixa* — Origem: Zeno ("Native BBR kthread"), not `93422676e7e4` (fq_codel como qdisc padrão; o not usa westwood). Aqui: `DEFAULT_TCP_CONG="cubic"` e `# CONFIG_TCP_CONG_BBR is not set`. Ligar `TCP_CONG_BBR` + `NET_SCH_FQ` (o BBR do 4.19 precisa do pacing do fq) é config pura e o default se escolhe por sysctl (`net.ipv4.tcp_congestion_control`) sem mudar o kernel de novo. Risco: baixo. Medir: `iperf3` (Wi-Fi e LTE) para um host da LAN e da internet, e latência sob carga (bufferbloat: ping durante o upload)
+
+### `#12` kgsl: prioridade do worker, eventos em kthread, timeouts (Wraith; not)
+*baixa* — Origem: not `36708536f426` (worker prio), `8214b9e599b4` (kthread para eventos), `8f72e7bd0d12` (mais ringbuffer inflight), `c7826a3eb77c`, `84df505c9c99` (snapshot desligado); Wraith "kgsl timeout changes/adjustments" (commits no repo do Z3phery). Risco: médio (GPU hang/recovery). Medir: `gfxinfo` (janky frames) e `kgsl` fault/recovery no dmesg
+
+### `#13` Boost de CPU/DDR no toque e no top-app (not; Wraith "ddr boost")
+*baixa* — Origem: not `2823aed97ecd` (boost de cpu/ddr de 500 ms), `b9964bbd0439` (boost quando processo do zygote vira top-app), `96e7057f7681` (input booster da Samsung modificado), `CONFIG_DEVFREQ_BOOST`. Este kernel já tem o input booster stock da Samsung. Risco: gasto de bateria; ganho só de responsividade. Medir: latência de abrir app (`am start -W`, display virtual) e batterystats
+
+### `#14` Escalonador de I/O SSG da Samsung
+*baixa* — Origem: not `bae231bfcd55` (SSG do G998U), `e912bcaa2ffe`/`6de3fc59a09d` (updates do S22/S23), `68ea61255242` (max available ratio 25), `a617fa15f07b` (só SSG). Aqui: deadline/kyber, sem SSG. Risco: baixo/médio (é código da própria Samsung, mas de outro SoC/firmware). Medir: AndroBench (seq/random), tempo de abertura de app frio, `iostat`/`/proc/diskstats`
+
+### `#15` UFS a 403 MHz e HZ 100/300 (QueenX; not)
+*baixa* — QueenX: UFS OC para 403 MHz e timer de 100 Hz; not: `CONFIG_HZ=300`. Aqui HZ=250. **UFS OC: não recomendo** (risco de corrupção do armazenamento, e a tabela de clock também é do DT, bloqueada como no `#8`). HZ é config pura, mas muda tudo o que é baseado em jiffies (e os `.ko` do companion se recompilam juntos). Ganho de bateria do HZ menor não medido em lugar nenhum. Medir: wakeups/s e residência de idle (`cpuidle`), batterystats em standby, jank
+
+### `#16` `WQ_POWER_EFFICIENT_DEFAULT` e RCU lazy
+*baixa* — Origem: not (`CONFIG_WQ_POWER_EFFICIENT_DEFAULT=y`, `CONFIG_RCU_LAZY=y` com ~610 commits de RCU backportados). O WQ é config pura e de risco baixo (workqueues unbound migram para CPU acordada). O RCU_LAZY **não é portável** sem o pacote de backports inteiro. Medir: wakeups no standby (baseline v4.4/v4.6) e batterystats de tela apagada
+
 ## Validação
 
-### `#8` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
+### `#17` Validar o `rear_torch_ua` da v4.11 no aparelho (sensor de luz)
 *validação* — (2026-10-24) — a v4.11 está gravada e rodando, e os atributos `rear_torch_ua`/`rear_torch_max_s` existem em `/sys/class/camera/flash/`, mas o LED ainda não foi aceso. O teste fica com a sessão que pediu o recurso: varredura de duty com o sensor de luz traseiro TCS3408 no escuro (5..50 % devem dar ~0,05..0,50 do degrau de 25 mA, com a correção de +10 µs por pulso), clamp em 1250 µA, degraus ≥ 25 mA, parada por `rear_flash`/câmera e o teto `rear_torch_max_s`. Avisar o usuário antes de acender o LED. Limitações conhecidas: o PWM para no suspend (abaixo de 25 mA com a tela apagada precisa de wakelock) e o modo EOL do tcs3407 falha se o PWM estiver ativo
 
+### `#18` Validar a v4.13 (KernelSU-Next) no aparelho: fases 1 e 2
+*validação* — (2026-11-03) — kernel e companion v4.13 prontos (`build/r8q/`, `ZIP/` do S20), **não gravados**. Fase 1: gravar com o Magisk intacto e sem o manager, conferir boot, Magisk, módulos, companion e `rezygiskd` dizendo "Magisk root implementation found". Fase 2: Desinstalação completa do Magisk → reflash da v4.13 → manager `KernelSU_Next_v3.4.0_33294` → metamódulo (nomount upstream com o `.ko` da v4.13, ou meta-overlayfs) → root por app/App Profile. Roteiro e auditoria dos 25 módulos em [docs/kernelsu.md](docs/kernelsu.md). O flash é decisão do usuário
+
+## Roadmap
+
+### `#19` SUSFS no KernelSU-Next
+*roadmap* — (2026-11-03) — decisão do usuário: fora da v4.13. O susfs4ksu do 4.19 (`gitlab.com/simonpunk/susfs4ksu`, branch do 4.19) mexe em structs do VFS, o que muda layout e CRCs: companion e nomount.ko precisam sair juntos, e o manager tem de suportar o SUSFS. Retomar depois que a fase 2 da v4.13 estiver estável. Junto: bump para a próxima release `-legacy` do KSU-Next (o deadlock do `pkg_observer`, `a56b9199`, e os fixes de policy ficaram depois da tag `v3.4.0-legacy`; ver docs/kernelsu.md) e nomount builtin (`CONFIG_NOMOUNT=y`)

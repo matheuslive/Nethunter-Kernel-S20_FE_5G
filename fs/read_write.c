@@ -602,11 +602,23 @@ static inline void file_pos_write(struct file *file, loff_t pos)
 		file->f_pos = pos;
 }
 
+#ifdef CONFIG_KSU
+/* KernelSU-Next: hook manual (docs/kernelsu.md) */
+extern bool ksu_vfs_read_hook;
+extern void ksu_handle_sys_read(unsigned int fd);
+#endif
+
 ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 {
-	struct fd f = fdget_pos(fd);
+	struct fd f;
 	ssize_t ret = -EBADF;
 
+#ifdef CONFIG_KSU
+	/* so ate o init ler o init.rc; depois o ksud desliga o gate */
+	if (unlikely(ksu_vfs_read_hook))
+		ksu_handle_sys_read(fd);
+#endif
+	f = fdget_pos(fd);
 	if (f.file) {
 		loff_t pos = file_pos_read(f.file);
 		ret = vfs_read(f.file, buf, count, &pos);

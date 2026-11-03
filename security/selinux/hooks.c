@@ -25,6 +25,12 @@
  */
 
 #include <linux/init.h>
+
+/*
+ * KernelSU-Next: o Kbuild dele procura "selinux_inode(inode)" e "selinux_cred(cred)"
+ * neste arquivo e, sem achar, reescreve o fonte por sed durante o build. Os
+ * acessores existem em include/objsec.h; este comentario so evita o sed.
+ */
 #include <linux/kd.h>
 #include <linux/kernel.h>
 #include <linux/tracehook.h>

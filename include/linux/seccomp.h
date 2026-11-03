@@ -11,6 +11,7 @@
 #ifdef CONFIG_SECCOMP
 
 #include <linux/thread_info.h>
+#include <linux/atomic.h>
 #include <asm/seccomp.h>
 
 struct seccomp_filter;
@@ -27,6 +28,16 @@ struct seccomp_filter;
  */
 struct seccomp {
 	int mode;
+	/*
+	 * filter_count: o KernelSU-Next zera este campo ao tirar o seccomp de um
+	 * processo com root (no 5.9+ ele existe). Aqui ele ocupa os 4 bytes de
+	 * padding entre "mode" e "filter" (sizeof continua 16 no arm64, ver
+	 * kernel/seccomp.c), e fica fora do genksyms: o layout e os CRCs do
+	 * MODVERSIONS nao mudam e os .ko do companion seguem carregando.
+	 */
+#ifndef __GENKSYMS__
+	atomic_t filter_count;
+#endif
 	struct seccomp_filter *filter;
 };
 

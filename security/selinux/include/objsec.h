@@ -165,4 +165,23 @@ struct perf_event_security_struct {
 	u32 sid;  /* SID of perf_event obj creator */
 };
 
+/*
+ * Acessores do 5.1 (LSM stacking), usados pelo KernelSU-Next. Aqui so devolvem
+ * o ponteiro direto. hooks.c, selinuxfs.c e xfrm.c continuam acessando
+ * cred->security/inode->i_security como antes; o Kbuild do KSU-Next reescreve
+ * esses arquivos por sed quando nao acha "selinux_inode(inode)" e
+ * "selinux_cred(...)" neles, e as linhas de comentario la existem so para
+ * impedir isso (ver docs/kernelsu.md).
+ */
+static inline struct inode_security_struct *selinux_inode(
+						const struct inode *inode)
+{
+	return inode->i_security;
+}
+
+static inline struct task_security_struct *selinux_cred(const struct cred *cred)
+{
+	return cred->security;
+}
+
 #endif /* _SELINUX_OBJSEC_H_ */

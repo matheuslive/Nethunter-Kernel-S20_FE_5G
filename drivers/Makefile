@@ -246,3 +246,6 @@ obj-$(CONFIG_GPS_BCM4753)	+= gps/
 
 # SPU signature verify
 obj-$(CONFIG_SPU_VERIFY) += spu_verify/
+
+# KernelSU-Next (submodulo KernelSU-Next/, tag v3.4.0-legacy)
+obj-$(CONFIG_KSU) += kernelsu/
