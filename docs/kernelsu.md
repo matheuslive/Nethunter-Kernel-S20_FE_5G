@@ -60,6 +60,94 @@ submódulo continua o da tag, então a versão (`rev-list --count` + 289) segue 
 `inode_rename` continua chamando o `track_throne()` direto, como na ponta da `legacy` (só depois
 do boot e só quando o `system` renomeia o `packages.list`).
 
+### v4.14: fix da persistência do allowlist
+
+**Sintoma na v4.13:** o root concedido por app (`ksud profile set` ou o manager) funciona na
+hora, mas some no reboot: o `/data/adb/ksu/.allowlist` fica com 0 bytes, e o dmesg mostra
+`KernelSU: save_allow_list create file failed: -126` (`-EKEYREVOKED`). Diagnóstico e o
+contorno por módulo (`ksugrants`) no `docs/firmware/kernelsu/ALLOWLIST-NAO-PERSISTE.md` do
+S20FE_re.
+
+**Causa (lida no código, não medida em runtime):**
+- O `do_persistent_allow_list()` (`kernel/policy/allowlist.c`) roda em `task_work` no init
+  (pid 1), mas antes do `filp_open()` faz `override_creds(ksu_cred)`.
+- A `ksu_cred` é um `prepare_creds()` do `kernelsu_init()` (`core/init.c`). Esse initcall roda
+  no `kernel_init`, antes do `/init` existir, e a cópia sai sem session keyring.
+- O `/data` é f2fs com fscrypt **v1**, e as chaves ficam no keyring legado `"fscrypt"`, no
+  session keyring que o init cria depois e que todo o userspace herda (vold, zygote, ksud).
+- Abrir ou criar arquivo em `/data/adb/ksu` (diretório cifrado) com o inode frio chama
+  `setup_file_encryption_key()` (`fs/crypto/keysetup.c`). A chave não está no keyring do
+  filesystem (`s_master_keys`), então o código cai no fallback v1,
+  `fscrypt_setup_v1_file_key_via_subscribed_keyrings()` → `request_key(logon,
+  "fscrypt:<desc>")`, que procura **nos keyrings da cred corrente**. O `-126` só pode vir
+  daí: a busca no keyring do filesystem (`search_fscrypt_keyring`) troca `-EKEYREVOKED` por
+  `-ENOKEY`.
+- Com a `ksu_cred`, essa busca só alcança o session keyring de usuário do root, onde o que
+  existe com esse nome está revogado. Daí o `-EKEYREVOKED` (o `keyring_search_iterator`
+  devolve isso quando só acha a chave revogada).
+- O `ksud` grava no mesmo diretório porque herda o session keyring do init. A leitura do boot
+  (`ksu_load_allow_list()`) não faz override e roda com a cred de quem a chama.
+- O workaround do upstream para isso (`init_session_keyring`, `CONFIG_KSU_ALLOWLIST_WORKAROUND`,
+  hook `key_permission`) é **código morto** na tag: o keyring do init é capturado, mas nada o
+  instala (o `ksu_filp_open_compat` da tag é só um `filp_open`).
+
+**Fix:** `patches/kernelsu-next/0002-allowlist-save-with-init-keyrings.patch`, aplicado pelo
+`tools/ksu-patches.sh` como o 0001:
+- A gravação usa uma cred nova, `ksu_prepare_save_cred()`: um `prepare_creds()` feito no
+  próprio `task_work`, ou seja, uma cópia da cred do init, **com os keyrings do init**.
+- Dessa cópia, só a identidade e o domínio vêm da `ksu_cred`: uids/gids, `securebits`, os cinco
+  conjuntos de capabilities e o estado SELinux inteiro (`task_security_struct`, pelo helper
+  novo `ksu_cred_copy_selinux()` em `selinux/selinux.c`). Para o SELinux, a gravação continua
+  sendo feita pelo domínio `u:r:ksu:s0`, como antes.
+- A cred é descartada ao fim (o `override_creds()` tem a própria referência, e o
+  `revert_creds()` a solta). Se o `prepare_creds()` falhar, a gravação volta à `ksu_cred`, com
+  um `pr_warn`.
+- Os outros usos da `ksu_cred` (`throne_tracker`, `kernel_umount`, `su_mount_ns`,
+  `file_wrapper`, `ksud_integration`) ficam como estão: não gravam em diretório cifrado com
+  inode frio.
+
+Driver, uapi e ABI não mudam (ver "Checagens do build da v4.14").
+
+**O que esperar no aparelho:**
+- Na v4.14, todo `ksud profile set` (ou grant pelo manager) imprime no dmesg uma linha `save
+  allow list, name: <pkg> uid :<uid>, allow: 1` por app, no lugar do `save_allow_list create
+  file failed: -126`.
+- `ls -l /data/adb/ksu/.allowlist` deve dar mais de 0 bytes: 8 de cabeçalho (magic `0x7f4b5355`
+  + versão) mais um `struct app_profile` por entrada.
+- Depois de um reboot, o manager mostra os apps com root sem o `ksugrants`, e o boot imprime
+  `allowlist version: 4` em vez de `allowlist file invalid`.
+- Se ainda aparecer `-126`, a hipótese do keyring do init está errada.
+- Se aparecer `-13` (`EACCES`), é o SELinux. Nesse caso, conferir no `/proc/keys` (como root)
+  em qual keyring está a chave `logon fscrypt:…`.
+- O módulo `ksugrants` pode continuar instalado: o que ele faz é idempotente.
+
+#### Checagens do build da v4.14
+
+O build é de 2026-11-03, às 19:58, feito na worktree `ksu-allowlist-fix` com `-j8` (havia
+10,8 GB livres). O banner é `Linux version 4.19.113-NetHunter_matheuslive_r8q_v4.14 … #1 SMP
+PREEMPT`.
+
+- **Kbuild:** driver `33294`, tag `v3.4.0-legacy`, nenhum warning no `drivers/kernelsu/`.
+- **Patch na Image:** a string `save_allow_list: prepare_creds failed, using ksu_cred` está no
+  `zImage` do zip. No `vmlinux` aparece o símbolo `ksu_cred_copy_selinux` (o
+  `ksu_prepare_save_cred` é `static` e foi inlinado).
+- **CRCs** (`tools/symvers-crc-check.sh build/r8q/v4.13/Module.symvers
+  build/r8q/v4.14/Module.symvers`): **14143 iguais, 0 novos, 0 divergentes/ausentes**. Os `.ko`
+  da v4.13 carregam na v4.14.
+- **nomount.ko da v4.14** (`KDIR=<worktree> tools/build-nomount.sh v4.14`): 60 de 60 CRCs, em
+  `build/r8q/v4.14/nomount/` (md5 do `.ko`: `6b20ea174fb62355f15212eb4cef12f3`).
+
+| Entregável (em `build/r8q/` do checkout principal) | md5 |
+|---|---|
+| `NetHunter_matheuslive_r8q_v4.14.zip` | `c479f6a6f2ea84a94d02e1fbcd64fa45` |
+| `nethunter-companion-r8q-v4.14.zip` (`version=v4.14`/`4140`) | `fe5c5f17089e22a90aeb1c0a4b00c5a2` |
+| `v4.14/` (`Module.symvers`, `vmlinux`, `.config`, `nomount/`) | |
+
+**Nada foi gravado no aparelho nem copiado para o SD:** o build rodou com
+`SD_HOST=nohost.invalid`. O companion foi salvo com a versão no nome, e o
+`nethunter-companion-r8q.zip` da v4.13 segue intacto em `build/r8q/`. Os nomes no SD e em
+`ZIP/` ficam a cargo de quem gravar.
+
 Outros commits da `legacy` depois da tag, para um bump futuro (quando sair a próxima release
 `-legacy` com manager):
 - `0550f9eb`: quatro defeitos de mutação de policy do SELinux; `465490a2`: dormir com o

@@ -1,0 +1,122 @@
+allowlist: grava o .allowlist com os keyrings do init (fscrypt v1)
+
+Porte local sobre a tag v3.4.0-legacy (S20 FE, 4.19, f2fs + fscrypt v1 com
+as chaves no keyring legado "fscrypt" do session keyring do init).
+
+O do_persistent_allow_list() roda em task_work no init, mas fazia
+override_creds(ksu_cred). A ksu_cred e uma copia da cred do initcall
+(prepare_creds() em core/init.c), anterior ao session keyring que o init
+cria e que todo o userspace herda; e nele que o vold poe as chaves v1. Sem
+a chave, o filp_open(O_CREAT|O_TRUNC) de /data/adb/ksu/.allowlist (diretorio
+cifrado) volta -EKEYREVOKED (-126) do request_key() do fallback v1 de
+fs/crypto/keysetup.c, e os grants somem no reboot. O workaround do upstream
+(init_session_keyring + CONFIG_KSU_ALLOWLIST_WORKAROUND) e codigo morto na
+tag: o keyring e capturado, mas ninguem o instala.
+
+A gravacao passa a usar uma cred nova: prepare_creds() no init (keyrings do
+init) com uids, caps e o estado SELinux copiados da ksu_cred. Se o
+prepare_creds() falhar, cai na ksu_cred como antes. Nao toca uapi nem a
+versao: o driver continua 33294. Aplicado pelo tools/ksu-patches.sh.
+
+diff --git a/kernel/policy/allowlist.c b/kernel/policy/allowlist.c
+index d2bf80a2..e2f9aedb 100644
+--- a/kernel/policy/allowlist.c
++++ b/kernel/policy/allowlist.c
+@@ -412,6 +412,40 @@ bool ksu_get_allow_list(int *array, u16 length, u16 *out_length, u16 *out_total,
+ 	return true;
+ }
+ 
++/*
++ * Cred para gravar o .allowlist. Roda em task_work no init (pid 1), entao
++ * prepare_creds() copia a cred do init, com o session keyring dele: e nele
++ * que o vold instala as chaves fscrypt v1 (keyring "fscrypt") que todo o
++ * userspace herda. A ksu_cred foi capturada no initcall, antes do init ter
++ * session keyring, e nao enxerga a chave de /data/adb (diretorio cifrado):
++ * o filp_open dava -EKEYREVOKED (-126). Da ksu_cred vem so a identidade
++ * (uids, caps) e o dominio SELinux; os keyrings ficam os do init.
++ */
++static struct cred *ksu_prepare_save_cred(void)
++{
++    struct cred *cred = prepare_creds();
++
++    if (!cred)
++        return NULL;
++
++    cred->uid = ksu_cred->uid;
++    cred->gid = ksu_cred->gid;
++    cred->suid = ksu_cred->suid;
++    cred->sgid = ksu_cred->sgid;
++    cred->euid = ksu_cred->euid;
++    cred->egid = ksu_cred->egid;
++    cred->fsuid = ksu_cred->fsuid;
++    cred->fsgid = ksu_cred->fsgid;
++    cred->securebits = ksu_cred->securebits;
++    cred->cap_inheritable = ksu_cred->cap_inheritable;
++    cred->cap_permitted = ksu_cred->cap_permitted;
++    cred->cap_effective = ksu_cred->cap_effective;
++    cred->cap_bset = ksu_cred->cap_bset;
++    cred->cap_ambient = ksu_cred->cap_ambient;
++    ksu_cred_copy_selinux(cred, ksu_cred);
++    return cred;
++}
++
+ // TODO: move to kernel thread or work queue
+ static void do_persistent_allow_list(struct callback_head *_cb)
+ {
+@@ -421,9 +455,15 @@ static void do_persistent_allow_list(struct callback_head *_cb)
+     loff_t off = 0;
+     int i;
+ 
+-    const struct cred *saved = override_creds(ksu_cred);
+-    struct file *fp =
+-        filp_open(KERNEL_SU_ALLOWLIST, O_WRONLY | O_CREAT | O_TRUNC, 0644);
++    struct cred *save_cred = ksu_prepare_save_cred();
++    const struct cred *saved = override_creds(save_cred ? save_cred : ksu_cred);
++    struct file *fp;
++
++    if (save_cred)
++        put_cred(save_cred); /* override_creds() tem a propria referencia */
++    else
++        pr_warn("save_allow_list: prepare_creds failed, using ksu_cred\n");
++    fp = filp_open(KERNEL_SU_ALLOWLIST, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+     if (IS_ERR(fp)) {
+         pr_err("save_allow_list create file failed: %ld\n", PTR_ERR(fp));
+         goto out;
+diff --git a/kernel/selinux/selinux.c b/kernel/selinux/selinux.c
+index 36f1677f..caead9c2 100644
+--- a/kernel/selinux/selinux.c
++++ b/kernel/selinux/selinux.c
+@@ -84,6 +84,20 @@ void setup_selinux(const char *domain, struct cred *cred)
+     }
+ }
+ 
++/*
++ * Copia o estado SELinux (sid, exec/create/keycreate/sockcreate sids) de
++ * src para dst. dst tem de ser uma cred nova (prepare_creds), ainda nao
++ * publicada.
++ */
++void ksu_cred_copy_selinux(struct cred *dst, const struct cred *src)
++{
++    struct task_security_struct *d = selinux_cred(dst);
++    const struct task_security_struct *s = selinux_cred(src);
++
++    if (d && s)
++        *d = *s;
++}
++
+ void setup_ksu_cred(void)
+ {
+     if (ksu_cred && transive_to_domain(KERNEL_SU_CONTEXT, ksu_cred, false)) {
+diff --git a/kernel/selinux/selinux.h b/kernel/selinux/selinux.h
+index 99e513b7..2b2162af 100644
+--- a/kernel/selinux/selinux.h
++++ b/kernel/selinux/selinux.h
+@@ -61,6 +61,8 @@ int handle_sepolicy(void __user *user_data, u64 data_len);
+ 
+ void setup_ksu_cred();
+ 
++void ksu_cred_copy_selinux(struct cred *dst, const struct cred *src);
++
+ void escape_to_root_for_adb_root();
+ 
+ extern u32 ksu_file_sid;

@@ -79,6 +79,9 @@ nomount.ko se recompilam juntos.
 ### `#18` Validar a v4.13 (KernelSU-Next) no aparelho: fases 1 e 2
 *validação* — (2026-11-03) — kernel e companion v4.13 prontos (`build/r8q/`, `ZIP/` do S20). **Fase 1 OK (2026-11-03, gravada pelo TWRP):** boot em ~90 s, driver KSU-Next inicializado, Magisk 30.7 + ReZygisk + Vector de pé, `.ko` do companion carregados, SELinux enforcing; o nomount porte-Magisk se desativou (vermagic v4.12), mantido assim até a fase 2. **Fase 2 OK (2026-11-03):** boot = Image da v4.13 + ramdisk stock (`magiskboot cpio restore` do ramdisk do Magisk, gravado por `dd`; sem o Complete Uninstall, que apaga o `/data/adb`), manager v3.4.0 = "Funcionando 33294", nomount upstream v2.2.0 com o `.ko` da v4.13 como metamódulo, todos os módulos montando, SELinux enforcing. Falta: uso diário e reconceder root por app. Fase 1 (roteiro): gravar com o Magisk intacto e sem o manager, conferir boot, Magisk, módulos, companion e `rezygiskd` dizendo "Magisk root implementation found". Fase 2: Desinstalação completa do Magisk → reflash da v4.13 → manager `KernelSU_Next_v3.4.0_33294` → metamódulo (nomount upstream com o `.ko` da v4.13, ou meta-overlayfs) → root por app/App Profile. Roteiro e auditoria dos 25 módulos em [docs/kernelsu.md](docs/kernelsu.md). O flash é decisão do usuário
 
+### `#20` Validar a v4.14 (allowlist do KernelSU-Next persistindo)
+*validação* — (2026-11-03) — kernel e companion v4.14 prontos em `build/r8q/` (não gravados). Fix: o `.allowlist` é gravado com os keyrings do init (patch `patches/kernelsu-next/0002-*`). Depois do flash (coordenado pela sessão do S20FE_re): `ksud profile set` → dmesg com `save allow list, name: … allow: 1` (e nada de `-126`), `/data/adb/ksu/.allowlist` > 0 bytes, grants persistem num reboot sem o `ksugrants`; nomount.ko da v4.14 em `build/r8q/v4.14/nomount/`. Roteiro em [docs/kernelsu.md](docs/kernelsu.md#v414-fix-da-persistência-do-allowlist)
+
 ## Roadmap
 
 ### `#19` SUSFS no KernelSU-Next
