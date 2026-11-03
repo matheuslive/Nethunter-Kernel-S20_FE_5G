@@ -127,6 +127,12 @@ if [ -f .gitmodules ] && [ -z "$(ls -A drivers/net/can/can-isotp 2>/dev/null)" ]
 	echo ">> inicializando submodules"
 	git submodule update --init --recursive
 fi
+# KernelSU-Next (v4.13+): submodulo na tag + patches locais (docs/kernelsu.md).
+if grep -q 'path = KernelSU-Next' "$KDIR/.gitmodules" 2>/dev/null &&
+   [ ! -e "$KDIR/KernelSU-Next/kernel/Kbuild" ]; then
+	git -C "$KDIR" submodule update --init KernelSU-Next
+fi
+"$DIR/tools/ksu-patches.sh" "$KDIR"
 
 # Compila o kernel
 mkdir -p "$OUT"

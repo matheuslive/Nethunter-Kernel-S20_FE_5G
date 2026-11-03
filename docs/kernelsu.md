@@ -35,12 +35,33 @@ importa, porque o `ksud` (que vem dentro do APK) confere a uapi (`ensure_uapi_ve
 e pula os estágios se ela não bater. A ponta da `legacy` (`b933b1f7`, driver 33318) já está na
 uapi **6**, à frente de qualquer manager publicado (o v3.4.2 é uapi 5).
 
-O que a tag deixa de fora (24 commits depois dela), para decidir num bump futuro, quando sair a
-próxima release `-legacy`:
-- `a56b9199`: deadlock no `pkg_observer`. O `track_throne()` roda **dentro** do callback do
-  fsnotify em `/data/system`, e abrir o `packages.list` com o dcache frio pega o mesmo `i_rwsem`.
-  Sintoma esperado: installd/system_server presos ao instalar ou atualizar um app. Não visto
-  aqui (o KSU ainda não rodou no S20); é o primeiro suspeito se a fase 2 travar numa instalação.
+### Patch local sobre a tag: deadlock do `pkg_observer` (decisão do usuário, 2026-11-03)
+
+Na tag, o `track_throne()` roda **dentro** do callback do fsnotify em `/data/system`, ainda sob o
+`down_write()` que o rename pegou no `i_rwsem` do diretório. Abrir o `packages.list` com o
+dcache frio pega o mesmo rwsem: o processo trava no próprio lock segurando o
+`throne_tracker_mutex`, e installd/system_server enfileiram atrás (travamento ao instalar ou
+atualizar app). O upstream corrigiu isso depois da tag, em `d652a89d` + `a56b9199`.
+
+`patches/kernelsu-next/0001-pkg_observer-defer-track_throne.patch` porta só a parte do
+`kernel/manager/pkg_observer.c`: o `track_throne()` vai para `task_work` (roda antes de a
+syscall voltar ao userspace, fora do lock), e o evento só conta com `FS_CREATE|FS_MOVED_TO`.
+Antes, todo open/close do `packages.list` disparava um rescan de `/data/app`. Ficam de fora a
+vigia de `/data/adb` (depende do `cd739c78`) e os outros arquivos do `a56b9199` (sulog,
+event_queue, apk_sign, throne_tracker), que são correções independentes. O arquivo resultante
+é idêntico ao `pkg_observer.c` da ponta da `legacy`, exceto pela vigia de `/data/adb`
+(conferido com `diff`). Não mexe em uapi nem em versão.
+
+Como é aplicado: o `tools/ksu-patches.sh` aplica `patches/kernelsu-next/*.patch` no working
+tree do submódulo, de forma idempotente (aplicado é pulado; patch que não aplica nem reverte é
+fatal). O `build.sh` e o `tools/repro-release.sh` o chamam antes do `make`. O commit do
+submódulo continua o da tag, então a versão (`rev-list --count` + 289) segue **33294**, e o
+`git status` do kernel mostra o submódulo com "modified content": é esperado. O hook LSM
+`inode_rename` continua chamando o `track_throne()` direto, como na ponta da `legacy` (só depois
+do boot e só quando o `system` renomeia o `packages.list`).
+
+Outros commits da `legacy` depois da tag, para um bump futuro (quando sair a próxima release
+`-legacy` com manager):
 - `0550f9eb`: quatro defeitos de mutação de policy do SELinux; `465490a2`: dormir com o
   `policy_rwlock` de escrita.
 - `7eac8a17`/`cd739c78`: no caminho de syscall, `su` cai em `sh` enquanto não houver `ksud`.
@@ -205,7 +226,7 @@ Regras gerais para os demais:
 ## Checagens do build
 
 Build de 2026-11-03 (`-j6`, `Linux version 4.19.113-NetHunter_matheuslive_r8q_v4.13 … #1 SMP
-PREEMPT`), sem nenhum warning no `drivers/kernelsu/` (o
+PREEMPT`, 2º build às 17:02 com o patch do `pkg_observer`), sem nenhum warning no `drivers/kernelsu/` (o
 `gcc-wrapper.py` os torna fatais):
 
 - **Config** (`out/.config`): `CONFIG_KSU=y`, `CONFIG_KSU_MANUAL_HOOK=y`, os outros quatro
@@ -217,6 +238,8 @@ PREEMPT`), sem nenhum warning no `drivers/kernelsu/` (o
   tag `v3.4.0-legacy` e o rc injetado (`exec u:r:ksu:s0 root -- /data/adb/ksud post-fs-data`,
   `services`, `boot-completed`). No `vmlinux`: `kernelsu_init`, os sete `ksu_handle_*` dos
   hooks, `path_umount` e `strscpy_pad`.
+- **Patch na Image:** as strings novas `defer track_throne: alloc failed` e `task_work_add
+  failed` estão no `zImage`; o `Module.symvers` é idêntico ao do build sem o patch.
 - **CRCs** (`tools/symvers-crc-check.sh build/r8q/v4.12/Module.symvers
   build/r8q/v4.13/Module.symvers`): **14142 iguais, 0 divergentes/ausentes, 1 novo**
   (`strscpy_pad`). O `module_layout` é o mesmo `0x185d1607` desde a v4.11. O vermagic dos
@@ -235,8 +258,8 @@ caminhos entram via `__FILE__`, e o `image-cmp-check.py` acusa a diferença. Nã
 
 | Arquivo | md5 | Onde |
 |---|---|---|
-| `NetHunter_matheuslive_r8q_v4.13.zip` (22 MB) | `6477d346da5d617249f9df5e10dd63a7` | `build/r8q/`, raiz do SD (substitui o v4.12, que fica em `ZIP/`), `/sdcard/ZIP/`, `<SD>/ZIP/` |
-| `nethunter-companion-r8q.zip` (v4.13) | `e363e56713bf0af5d37ca314ad1761da` | `build/r8q/`, raiz do SD; `nethunter-companion-r8q-v4.13.zip` nas duas `ZIP/` |
+| `NetHunter_matheuslive_r8q_v4.13.zip` (22 MB) | `0ba019e5bbf3f56098c3e917382cda9d` | `build/r8q/`, raiz do SD (substitui o v4.12, que fica em `ZIP/`), `/sdcard/ZIP/`, `<SD>/ZIP/` |
+| `nethunter-companion-r8q.zip` (v4.13) | `344eb7993d571d419edd7132aac57c73` | `build/r8q/`, raiz do SD; `nethunter-companion-r8q-v4.13.zip` nas duas `ZIP/` |
 | `KernelSU_Next_v3.4.0_33294-release.apk` | `c89d54e2959eecd5a2063bbd4da05bc7` | as duas `ZIP/` (não instalado) |
 | `nomount.ko` + `nm` da v4.13 | `build/r8q/v4.13/nomount/md5.txt` | só na workstation |
 

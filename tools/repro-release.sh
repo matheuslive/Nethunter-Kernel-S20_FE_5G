@@ -97,6 +97,9 @@ if [ "${RECACHE:-0}" = 1 ]; then
 	export CCACHE_RECACHE=1
 fi
 
+# KernelSU-Next (v4.13+): patches locais no submodulo; no-op em arvore sem KSU
+[ ! -e "$KDIR/tools/ksu-patches.sh" ] || "$KDIR/tools/ksu-patches.sh" "$KDIR"
+
 make "${MAKE_ARGS[@]}" wirus_defconfig
 nice make -j"$JOBS" "${MAKE_ARGS[@]}"
 

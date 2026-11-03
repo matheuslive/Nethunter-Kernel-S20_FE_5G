@@ -1,0 +1,92 @@
+pkg_observer: adia o track_throne() para task_work (deadlock do fsnotify)
+
+Porte local do deadlock fix do KernelSU-Next sobre a tag v3.4.0-legacy:
+a parte de pkg_observer.c de d652a89d + a56b9199 ("pkg_observer, sulog,
+manager: stop the deadlock, log su, unstick the queue"), sem a vigia de
+/data/adb (que depende de cd739c78) e sem os outros arquivos do a56b9199.
+Nao toca uapi nem a versao: o driver continua 33294 (rev-list da tag).
+
+O callback do fsnotify roda ainda sob o down_write() que o rename pegou em
+/data/system->i_rwsem; o track_throne() abre /data/system/packages.list e,
+com o dcache frio, pega o mesmo rwsem -> o processo trava no proprio lock
+segurando o throne_tracker_mutex, e installd/system_server enfileiram atras.
+Tambem filtra FS_CREATE|FS_MOVED_TO: o MASK_SYSTEM tem FS_EVENT_ON_CHILD e
+todo open/close do packages.list disparava um rescan de /data/app.
+
+Aplicado pelo tools/ksu-patches.sh (chamado pelo build.sh/repro-release.sh).
+
+diff --git a/kernel/manager/pkg_observer.c b/kernel/manager/pkg_observer.c
+index fb4f0199..6c7457be 100644
+--- a/kernel/manager/pkg_observer.c
++++ b/kernel/manager/pkg_observer.c
+@@ -5,9 +5,12 @@
+ #include <linux/fsnotify_backend.h>
+ #include <linux/slab.h>
+ #include <linux/rculist.h>
++#include <linux/sched.h>
++#include <linux/task_work.h>
+ #include <linux/version.h>
+ #include "klog.h" // IWYU pragma: keep
+ #include "throne_tracker.h"
++#include "compat/kernel_compat.h" // TWA_RESUME on < 5.7
+ 
+ #define MASK_SYSTEM (FS_CREATE | FS_MOVE | FS_EVENT_ON_CHILD)
+ 
+@@ -21,6 +24,44 @@ struct watch_dir {
+ 
+ static struct fsnotify_group *g;
+ 
++/*
++ * fsnotify fires from inside fsnotify_move(), i.e. still under the
++ * down_write() that do_renameat2() took on /data/system->i_rwsem, and with
++ * fsnotify_mark_srcu read-locked. track_throne() opens /data/system/packages
++ * .list, which takes that same rwsem shared - the calling task then blocks
++ * on its own write lock, forever, while holding throne_tracker_mutex so every
++ * other caller queues behind it. Defer to task_work, which runs before the
++ * syscall returns to userspace.
++ */
++static void ksu_track_throne_tw_func(struct callback_head *cb)
++{
++	kfree(cb);
++	/* 4.14 kernel/exit.c runs exit_task_work() after exit_fs(). */
++	if (current->flags & PF_EXITING)
++		return;
++	track_throne(false);
++}
++
++static void ksu_defer_track_throne(void)
++{
++	struct callback_head *cb;
++
++	if (current->flags & PF_KTHREAD)
++		return;
++
++	cb = kzalloc(sizeof(*cb), GFP_KERNEL);
++	if (!cb) {
++		pr_warn("defer track_throne: alloc failed, skipping event\n");
++		return;
++	}
++
++	cb->func = ksu_track_throne_tw_func;
++	if (task_work_add(current, cb, TWA_RESUME)) {
++		kfree(cb);
++		pr_warn("defer track_throne: task_work_add failed, skipping event\n");
++	}
++}
++
+ #include "pkg_observer_defs.h" // KSU_DECL_FSNOTIFY_OPS
+ static KSU_DECL_FSNOTIFY_OPS(ksu_handle_inode_event)
+ {
+@@ -30,8 +71,10 @@ static KSU_DECL_FSNOTIFY_OPS(ksu_handle_inode_event)
+ 		return 0;
+ 	if (ksu_fname_len(file_name) == 13 &&
+ 	    !memcmp(ksu_fname_arg(file_name), "packages.list", 13)) {
+-		pr_info("packages.list detected: %d\n", mask);
+-		track_throne(false);
++		if (mask & (FS_CREATE | FS_MOVED_TO)) {
++			pr_info("packages.list detected: %d\n", mask);
++			ksu_defer_track_throne();
++		}
+ 	}
+ 	return 0;
+ }
