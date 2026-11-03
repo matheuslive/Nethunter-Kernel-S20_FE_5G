@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-03
+
+- **17:04 Corrigido:** deadlock do `pkg_observer` do KernelSU-Next (`track_throne()` dentro do callback do fsnotify, sob o `i_rwsem` de `/data/system`) por patch local sobre a tag (`patches/kernelsu-next/`, aplicado pelo `tools/ksu-patches.sh` no `build.sh`/`repro-release.sh`); driver segue 33294/uapi 4; zips da v4.13 refeitos ([a1d3ff5](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/a1d3ff545), [docs/kernelsu.md](docs/kernelsu.md#patch-local-sobre-a-tag-deadlock-do-pkg_observer-decisão-do-usuário-2026-11-03))
+- **16:59 Implementado:** v4.13 com KernelSU-Next builtin (submódulo na tag `v3.4.0-legacy`, driver 33294 = manager v3.4.0), hooks manuais em exec/faccessat/stat/read/input/reboot, backports `path_umount`/`strscpy_pad`, `seccomp.filter_count` no padding: 0 CRCs mudados contra a v4.12 (`tools/symvers-crc-check.sh`); plano de migração em duas fases; inventário de otimizações dos kernels de terceiros no TODO (`#8`–`#16`) ([413e843](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/413e8433e), [docs/kernelsu.md](docs/kernelsu.md))
+
 ## 2026-11-02
 
 - **21:50 Corrigido:** `/proc/config.gz` passa a embutir o `.config` do build (`$(KCONFIG_CONFIG)`), não o `r8q_eur_openx_defconfig` fixo que o `kernel/Makefile` da Samsung usava; vale a partir da próxima release ([8930777](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/8930777e4))
