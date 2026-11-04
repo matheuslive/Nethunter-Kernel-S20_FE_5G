@@ -2,6 +2,7 @@
 
 ## 2026-11-04
 
+- **12:18 Alterado:** comentário do hexpatch `skip_initramfs`→`want_initramfs` no `tools/flash-booted.sh`: faz o kernel usar o ramdisk do boot (stock ou Magisk), validado na v4.15 ([222c43e](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/222c43ee2))
 - **12:17 Alterado:** `tools/flash-booted.sh` acha o magiskboot sem o Magisk: `MB` do ambiente ou o primeiro de `/data/adb/tools/magiskboot`, `/data/adb/ksu/bin/magiskboot`, `/data/adb/magisk/magiskboot`, com erro claro se nenhum existir; atalhos da raiz (gitignorados) passam para a v4.15 (`NetHunter_matheuslive_r8q_v4.15.zip` e `nethunter-companion-r8q.zip` → `nethunter-companion-r8q-v4.15.zip`); v4.15 validada no aparelho (TODO `#21` → DONE) ([5a14407](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/5a1440722))
 
 ## 2026-11-03
