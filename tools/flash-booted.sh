@@ -4,7 +4,8 @@
 # boot atual:
 #   - backup do boot atual (fica no aparelho e em build/r8q/boot-<atual>-<data>.img);
 #   - split do zImage (Image.gz-dtb) do zip, hexpatch skip_initramfs -> want_initramfs
-#     (o que o Magisk faz para manter o root);
+#     (faz o kernel usar o ramdisk da particao boot, stock ou Magisk; validado na
+#     v4.15 com ramdisk stock);
 #   - troca so o kernel; ramdisk, cmdline, dtb e kernel_dtb ficam os do boot atual;
 #   - grava so se a particao nao mudou desde o backup e confere o md5 relendo-a.
 # Nao reinicia o aparelho. Gravar so com aprovacao explicita do usuario.
