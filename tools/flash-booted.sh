@@ -1,6 +1,7 @@
 #!/bin/bash
 # Grava o kernel de um zip AnyKernel no S20 com o Android LIGADO (sem recovery),
-# pelo magiskboot do Magisk, sobre a imagem de boot atual:
+# pelo magiskboot (binario avulso no aparelho; ver MB abaixo), sobre a imagem de
+# boot atual:
 #   - backup do boot atual (fica no aparelho e em build/r8q/boot-<atual>-<data>.img);
 #   - split do zImage (Image.gz-dtb) do zip, hexpatch skip_initramfs -> want_initramfs
 #     (o que o Magisk faz para manter o root);
@@ -10,11 +11,16 @@
 #
 # Uso: tools/flash-booted.sh <zip> [--write]
 #   sem --write: so prepara e confere a imagem nova (nada e gravado).
+#
+# MB: caminho do magiskboot NO APARELHO. Sem MB no ambiente, usa o primeiro que
+# existir entre /data/adb/tools/magiskboot, /data/adb/ksu/bin/magiskboot e
+# /data/adb/magisk/magiskboot (este so existe com o Magisk instalado).
 set -euo pipefail
 
 ZIP=${1:?uso: $0 <zip> [--write]}
 WRITE=${2:-}
 HOST=${S20_HOST:-root@s20}
+MB=${MB:-}
 DIR=$(cd "$(dirname "$0")/.." && pwd)
 WD=/data/local/tmp/flash-booted
 LOCAL=$DIR/tmp/flash-booted
@@ -28,7 +34,16 @@ scp -q "$LOCAL/zImage" "$HOST:$WD/"
 ssh "$HOST" 'sh -s' <<EOF
 set -e
 cd $WD
-MB=/data/adb/magisk/magiskboot
+MB='$MB'
+if [ -z "\$MB" ]; then
+	for c in /data/adb/tools/magiskboot /data/adb/ksu/bin/magiskboot \
+		/data/adb/magisk/magiskboot; do
+		[ -x "\$c" ] && { MB=\$c; break; }
+	done
+fi
+[ -n "\$MB" ] && [ -x "\$MB" ] || {
+	echo "magiskboot nao encontrado no aparelho (defina MB=<caminho>)"; exit 1; }
+echo "magiskboot: \$MB"
 B=\$(readlink -f /dev/block/by-name/boot)
 dd if=\$B of=boot-cur.img bs=4M 2>/dev/null
 md5sum boot-cur.img | cut -d' ' -f1 > boot-cur.md5

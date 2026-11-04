@@ -164,3 +164,6 @@ Feito no projeto Mod por filha de fora (commits `4f70733` + `6986036`, mod_compa
 
 ### `2026-11-02` Descobrir por que o `/proc/config.gz` do S20 serve o config stock
 Causa: o `kernel/Makefile` da Samsung (desde o import do source G781BXXU1ATIG) gerava o `config_data.gz` a partir de `arch/arm64/configs/r8q_eur_openx_defconfig` fixo, em vez do `$(KCONFIG_CONFIG)` do upstream. Nada no device troca o arquivo. Corrigido para `$(KCONFIG_CONFIG)`; o `kernel/configs.o` regenerado tem `config_data.gz` idêntico ao `out/.config`. Vale a partir da próxima release do kernel (a v4.12 gravada continua servindo o stock).
+
+### `2026-11-04` Validar a v4.15 (manager do KernelSU-Next coroado no boot)
+Gravada no S20 e validada em 2026-11-04 pela sessão do S20FE_re (boot = Image da v4.15 + ramdisk stock, sem Magisk). Pronta desde 2026-11-03: kernel e companion v4.15 prontos em `build/r8q/`. Fix: o `track_throne()` busca o manager com os keyrings do processo e não cacheia base.apk que falhou ao abrir (patch `patches/kernelsu-next/0003-*`). Depois do flash (coordenado pela sessão do S20FE_re): dmesg do boot com `Crowning manager` na primeira busca (~35 s), sem `open … error` em massa; se sobrar algum, o errno do log diz a causa (`-126` = `ENOKEY`). Roteiro em [docs/kernelsu.md](docs/kernelsu.md#v415-o-manager-é-coroado-no-boot)
