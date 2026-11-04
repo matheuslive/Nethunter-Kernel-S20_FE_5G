@@ -1,5 +1,9 @@
 # Changelog
 
+## 2026-11-04
+
+- **12:17 Alterado:** `tools/flash-booted.sh` acha o magiskboot sem o Magisk: `MB` do ambiente ou o primeiro de `/data/adb/tools/magiskboot`, `/data/adb/ksu/bin/magiskboot`, `/data/adb/magisk/magiskboot`, com erro claro se nenhum existir; atalhos da raiz (gitignorados) passam para a v4.15 (`NetHunter_matheuslive_r8q_v4.15.zip` e `nethunter-companion-r8q.zip` → `nethunter-companion-r8q-v4.15.zip`); v4.15 validada no aparelho (TODO `#21` → DONE) ([5a14407](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/5a1440722))
+
 ## 2026-11-03
 
 - **23:45 Corrigido:** v4.15: o KernelSU-Next coroa o manager no boot: o `track_throne()` abre os `base.apk` com os keyrings do processo (antes `ksu_cred`, sem as chaves fscrypt v1: `open … error` em quase todos no boot) e não cacheia mais `base.apk` que falhou ao abrir; errno no log; patch local `patches/kernelsu-next/0003-*`; driver 33294, 0 CRCs mudados contra a v4.14, nomount.ko da v4.15; não gravado ([ffb7425](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/ffb7425e5), [docs/kernelsu.md](docs/kernelsu.md#v415-o-manager-é-coroado-no-boot))
