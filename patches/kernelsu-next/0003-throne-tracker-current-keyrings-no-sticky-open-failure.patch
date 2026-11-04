@@ -1,0 +1,194 @@
+throne_tracker: busca o manager com os keyrings do processo e nao cacheia
+base.apk que falhou ao abrir
+
+Porte local sobre a tag v3.4.0-legacy (4.19, f2fs + fscrypt v1 com as
+chaves no keyring legado "fscrypt" do session keyring do init). Mesma
+classe de bug do 0002.
+
+1. track_throne() fazia override_creds(ksu_cred). A ksu_cred e uma copia da
+   cred do initcall, anterior ao session keyring do init. Abrir um base.apk
+   em /data/app cujo inode ainda nao tinha a chave montada (nenhum outro
+   processo o abriu antes) falhava no fallback v1 de fs/crypto/keysetup.c,
+   e no boot a busca falhava em praticamente todos os base.apk: o manager
+   nunca era coroado. Agora a busca usa prepare_creds() do processo atual
+   (task_work, hook LSM de renameat, ksud: todos herdam o session keyring
+   do init) com uids, caps e o estado SELinux copiados da ksu_cred. Em
+   kthread, ou se prepare_creds() falhar, cai na ksu_cred como antes.
+
+2. Falha grudenta: quando a abertura falhava, is_manager_apk() devolvia
+   false e my_actor() gravava o hash do caminho em apk_path_hash_list; as
+   buscas seguintes pulavam o base.apk enquanto o caminho existisse. Agora
+   is_manager_apk() devolve 1 (manager), 0 (nao e) ou o errno da abertura,
+   e no erro o caminho nao entra no cache: a proxima busca tenta de novo.
+
+3. O "open ... error" passa a mostrar o errno (ratelimited, ja que um
+   caminho com erro e retentado a cada busca).
+
+Nao toca uapi nem a versao: o driver continua 33294. Aplicado pelo
+tools/ksu-patches.sh depois do 0001 e do 0002.
+
+diff --git a/kernel/manager/apk_sign.c b/kernel/manager/apk_sign.c
+index 17d69d14..9adc08a6 100644
+--- a/kernel/manager/apk_sign.c
++++ b/kernel/manager/apk_sign.c
+@@ -146,7 +146,8 @@ static bool check_block(struct file *fp, loff_t *pos, loff_t block_end, unsigned
+ 
+ static __always_inline bool check_v2_signature(char *path,
+                                                unsigned expected_size,
+-                                               const char *expected_sha256)
++                                               const char *expected_sha256,
++                                               int *open_err)
+ {
+ 	unsigned char buffer[0x10] = { 0 };
+ 	u32 cd_offset, cd_size;
+@@ -160,7 +161,8 @@ static __always_inline bool check_v2_signature(char *path,
+ 
+ 	struct file *fp = ksu_filp_open_nonotify(path, O_RDONLY | O_NOATIME);
+ 	if (IS_ERR(fp)) {
+-		pr_err("open %s error.\n", path);
++		*open_err = PTR_ERR(fp);
++		pr_err_ratelimited("open %s error: %ld\n", path, PTR_ERR(fp));
+ 		return false;
+ 	}
+ 
+@@ -372,19 +374,30 @@ int get_pkg_from_apk_path(char *pkg, const char *path)
+ 	return 0;
+ }
+ 
+-bool is_manager_apk(char *path)
++/*
++ * 1 = manager, 0 = not the manager, < 0 = base.apk could not be opened
++ * (errno). The caller must not cache a path that failed to open: the
++ * failure can be transient (e.g. fscrypt key not reachable yet).
++ */
++int is_manager_apk(char *path)
+ {
++	int open_err = 0;
++	bool ok;
+ #ifdef KSU_MANAGER_PACKAGE
+ 	char pkg[KSU_MAX_PACKAGE_NAME];
+ 	if (get_pkg_from_apk_path(pkg, path) < 0) {
+ 		pr_err("Failed to get package name from apk path: %s\n", path);
+-		return false;
++		return 0;
+ 	}
+ 
+ 	// pkg is `<real package>`
+ 	if (strncmp(pkg, KSU_MANAGER_PACKAGE, sizeof(KSU_MANAGER_PACKAGE))) {
+-		return false;
++		return 0;
+ 	}
+ #endif
+-	return check_v2_signature(path, EXPECTED_MANAGER_SIZE, EXPECTED_MANAGER_HASH);
++	ok = check_v2_signature(path, EXPECTED_MANAGER_SIZE, EXPECTED_MANAGER_HASH,
++				&open_err);
++	if (open_err)
++		return open_err;
++	return ok ? 1 : 0;
+ }
+diff --git a/kernel/manager/apk_sign.h b/kernel/manager/apk_sign.h
+index d3a44bd2..918b9aa0 100644
+--- a/kernel/manager/apk_sign.h
++++ b/kernel/manager/apk_sign.h
+@@ -3,7 +3,7 @@
+ 
+ #include <linux/types.h>
+ 
+-bool is_manager_apk(char *path);
++int is_manager_apk(char *path);
+ int get_pkg_from_apk_path(char *pkg, const char *path);
+ 
+ #endif
+diff --git a/kernel/manager/throne_tracker.c b/kernel/manager/throne_tracker.c
+index 6cf7d626..be696fb3 100644
+--- a/kernel/manager/throne_tracker.c
++++ b/kernel/manager/throne_tracker.c
+@@ -14,6 +14,7 @@
+ #include "klog.h" // IWYU pragma: keep
+ #include "manager/manager_identity.h"
+ #include "manager/throne_tracker.h"
++#include "selinux/selinux.h"
+ 
+ uid_t ksu_manager_appid = KSU_INVALID_APPID;
+ 
+@@ -82,7 +83,6 @@ struct my_dir_context {
+ #define FILLDIR_ACTOR_CONTINUE 0
+ #define FILLDIR_ACTOR_STOP -EINVAL
+ #endif
+-extern bool is_manager_apk(char *path);
+ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
+ 							int namelen, loff_t off, u64 ino,
+ 							unsigned int d_type)
+@@ -138,7 +138,14 @@ FILLDIR_RETURN_TYPE my_actor(struct dir_context *ctx, const char *name,
+ 				}
+ 			}
+ 
+-			bool is_manager = is_manager_apk(dirpath);
++			int is_manager = is_manager_apk(dirpath);
++			if (is_manager < 0) {
++				/*
++				 * Open failed: do not cache the path, so the
++				 * next search tries this base.apk again.
++				 */
++				return FILLDIR_ACTOR_CONTINUE;
++			}
+ 			pr_info("Found new base.apk at path: %s, is_manager: %d\n", dirpath,
+ 					is_manager);
+ 			if (is_manager) {
+@@ -260,9 +267,55 @@ static bool is_uid_exist(uid_t uid, char *package, void *data)
+ 	return exist;
+ }
+ 
++/*
++ * Cred for track_throne(). It opens files under /data (packages.list and
++ * every base.apk in /data/app), which on fscrypt v1 needs the encryption
++ * keys from the legacy "fscrypt" keyring that userspace reaches through the
++ * session keyring inherited from init. ksu_cred was captured at initcall
++ * time, before that keyring existed, so opening a file whose key was not
++ * set up yet by another process failed (-EKEYREVOKED/-ENOKEY), and the
++ * manager was never found on boot. Take the keyrings of the current task
++ * (callers run in process context: task_work, renameat LSM hook, ksud) and
++ * only identity, caps and SELinux state from ksu_cred. Kernel threads have
++ * no useful keyrings: keep ksu_cred there.
++ */
++static struct cred *ksu_prepare_throne_cred(void)
++{
++	struct cred *cred;
++
++	if (current->flags & PF_KTHREAD)
++		return NULL;
++
++	cred = prepare_creds();
++	if (!cred)
++		return NULL;
++
++	cred->uid = ksu_cred->uid;
++	cred->gid = ksu_cred->gid;
++	cred->suid = ksu_cred->suid;
++	cred->sgid = ksu_cred->sgid;
++	cred->euid = ksu_cred->euid;
++	cred->egid = ksu_cred->egid;
++	cred->fsuid = ksu_cred->fsuid;
++	cred->fsgid = ksu_cred->fsgid;
++	cred->securebits = ksu_cred->securebits;
++	cred->cap_inheritable = ksu_cred->cap_inheritable;
++	cred->cap_permitted = ksu_cred->cap_permitted;
++	cred->cap_effective = ksu_cred->cap_effective;
++	cred->cap_bset = ksu_cred->cap_bset;
++	cred->cap_ambient = ksu_cred->cap_ambient;
++	ksu_cred_copy_selinux(cred, ksu_cred);
++	return cred;
++}
++
+ void track_throne(bool prune_only)
+ {
+-	const struct cred *old_cred = override_creds(ksu_cred);
++	struct cred *throne_cred = ksu_prepare_throne_cred();
++	const struct cred *old_cred =
++		override_creds(throne_cred ? throne_cred : ksu_cred);
++
++	if (throne_cred)
++		put_cred(throne_cred); /* override_creds() holds its own ref */
+ 	struct file *fp = filp_open(SYSTEM_PACKAGES_LIST_PATH, O_RDONLY, 0);
+ 	if (IS_ERR(fp)) {
+ 		pr_err("%s: open " SYSTEM_PACKAGES_LIST_PATH " failed: %ld\n", __func__,

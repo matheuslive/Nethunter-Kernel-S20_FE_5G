@@ -82,6 +82,9 @@ nomount.ko se recompilam juntos.
 ### `#20` Validar a v4.14 (allowlist do KernelSU-Next persistindo)
 *validação* — (2026-11-03) — kernel e companion v4.14 prontos em `build/r8q/` (não gravados). Fix: o `.allowlist` é gravado com os keyrings do init (patch `patches/kernelsu-next/0002-*`). Depois do flash (coordenado pela sessão do S20FE_re): `ksud profile set` → dmesg com `save allow list, name: … allow: 1` (e nada de `-126`), `/data/adb/ksu/.allowlist` > 0 bytes, grants persistem num reboot sem o `ksugrants`; nomount.ko da v4.14 em `build/r8q/v4.14/nomount/`. Roteiro em [docs/kernelsu.md](docs/kernelsu.md#v414-fix-da-persistência-do-allowlist)
 
+### `#21` Validar a v4.15 (manager do KernelSU-Next coroado no boot)
+*validação* — (2026-11-03) — kernel e companion v4.15 prontos em `build/r8q/` (não gravados). Fix: o `track_throne()` busca o manager com os keyrings do processo e não cacheia base.apk que falhou ao abrir (patch `patches/kernelsu-next/0003-*`). Depois do flash (coordenado pela sessão do S20FE_re): dmesg do boot com `Crowning manager` na primeira busca (~35 s), sem `open … error` em massa; se sobrar algum, o errno do log diz a causa (`-126` = `ENOKEY`). Roteiro em [docs/kernelsu.md](docs/kernelsu.md#v415-o-manager-é-coroado-no-boot)
+
 ## Roadmap
 
 ### `#19` SUSFS no KernelSU-Next

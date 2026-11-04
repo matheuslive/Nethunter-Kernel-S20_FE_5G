@@ -148,6 +148,72 @@ PREEMPT`.
 `nethunter-companion-r8q.zip` da v4.13 segue intacto em `build/r8q/`. Os nomes no SD e em
 `ZIP/` ficam a cargo de quem gravar.
 
+### v4.15: o manager é coroado no boot
+
+**Sintoma na v4.14:** o manager nunca é reconhecido no boot. Na busca dos ~35 s, o dmesg mostra
+`KernelSU: open /data/app/…/base.apk error.` para praticamente todos os base.apk, e nenhum
+`Crowning manager`. Mais tarde (depois do unlock) a maioria já abre, mas o base.apk do manager
+não é testado de novo.
+
+**Causas (lidas no código):**
+- O `track_throne()` (`kernel/manager/throne_tracker.c`) faz `override_creds(ksu_cred)` antes
+  de abrir o `packages.list` e cada base.apk. É a mesma classe do bug do `.allowlist` (v4.14):
+  a `ksu_cred` não tem o session keyring do init, e abrir um base.apk cujo inode ainda está
+  frio (nenhum outro processo o abriu) cai no fallback v1 do fscrypt e falha. Os já abertos
+  por alguém têm o `i_crypt_info` e passam, por isso o quadro melhora com o tempo.
+- A falha "gruda": `is_manager_apk()` devolvia `false` no erro de abertura, e o `my_actor()`
+  guardava o hash do caminho no `apk_path_hash_list`. As buscas seguintes pulam o caminho
+  enquanto ele existir.
+
+**Fix:** `patches/kernelsu-next/0003-throne-tracker-current-keyrings-no-sticky-open-failure.patch`,
+aplicado pelo `tools/ksu-patches.sh` depois do 0001 e do 0002:
+- O `track_throne()` usa `ksu_prepare_throne_cred()`: `prepare_creds()` do processo atual (os
+  chamadores rodam em contexto de processo: `task_work` do `pkg_observer`, hook LSM do
+  `renameat` no `system_server`, `ksud`), com uids, caps, `securebits` e o SELinux da
+  `ksu_cred`, como o `ksu_prepare_save_cred()` do 0002. Em kthread, ou se o `prepare_creds()`
+  falhar, volta à `ksu_cred`. O helper é uma cópia do do 0002, e não um helper movido: mexer
+  nas linhas do 0002 quebraria a checagem reversa do `ksu-patches.sh` (o "já aplicado").
+- `is_manager_apk()` devolve `1` (manager), `0` (não é) ou o errno da abertura. No erro, o
+  caminho **não** entra no cache, e a próxima busca tenta o base.apk de novo. Nome de pacote
+  diferente e assinatura inválida continuam no cache (são definitivos).
+- O log vira `open <path> error: <errno>` (ratelimited, porque um caminho com erro é retentado
+  a cada busca).
+
+Driver, uapi e ABI não mudam.
+
+**O que esperar no aparelho:**
+- Na primeira busca (~35 s): `Found new base.apk at path: …, is_manager: 1` e `Crowning
+  manager`, sem `open … error` em massa.
+- O errno no log discrimina a causa: se ainda houver `open … error: -126` (`ENOKEY`) ou
+  `-128` (`EKEYREVOKED`), a hipótese dos keyrings está errada (ou incompleta); outro errno aponta
+  outra causa. Atenção: `-126` é `ENOKEY`, não `EKEYREVOKED` (`-128`); a seção da v4.14 acima
+  rotula o `-126` como `EKEYREVOKED`.
+- O contorno por `post-fs-data.d` (supercall que fixa o uid do manager) fica redundante.
+
+#### Checagens do build da v4.15
+
+O build é de 2026-11-03, às 23:23, feito na worktree `ksu-throne-cred` com `-j8` (havia
+12,7 GB livres). O banner é `Linux version 4.19.113-NetHunter_matheuslive_r8q_v4.15 … #1 SMP
+PREEMPT`.
+
+- **Kbuild:** driver `33294`, os três patches aplicados (o `ksu-patches.sh` roda duas vezes
+  seguidas sem erro: "aplicado" e depois "ja aplicado"), nenhum warning no `drivers/kernelsu/`.
+- **Patch na Image:** a string `open %s error: %ld` está no `vmlinux`, e a antiga
+  `open %s error.` sumiu.
+- **CRCs** (`tools/symvers-crc-check.sh build/r8q/v4.14/Module.symvers
+  build/r8q/v4.15/Module.symvers`): **14143 iguais, 0 novos, 0 divergentes/ausentes**.
+- **nomount.ko da v4.15** (`KDIR=<worktree> tools/build-nomount.sh v4.15`): 60 de 60 CRCs,
+  vermagic `…_v4.15`, em `build/r8q/v4.15/nomount/` (md5 do `.ko`:
+  `55823f06f5d3b45ca880af9d3a96c4e6`).
+
+| Entregável (em `build/r8q/` do checkout principal) | md5 |
+|---|---|
+| `NetHunter_matheuslive_r8q_v4.15.zip` | `8c6179c3c08194980c19789cd8919420` |
+| `nethunter-companion-r8q-v4.15.zip` (`version=v4.15`/`4150`) | `90106d91417a3ae336f31dfb88fe5a0e` |
+| `v4.15/` (`Module.symvers`, `vmlinux`, `.config`, `nomount/`) | |
+
+**Nada foi gravado no aparelho nem copiado para o SD** (`SD_HOST=nohost.invalid`), como na v4.14.
+
 Outros commits da `legacy` depois da tag, para um bump futuro (quando sair a próxima release
 `-legacy` com manager):
 - `0550f9eb`: quatro defeitos de mutação de policy do SELinux; `465490a2`: dormir com o
