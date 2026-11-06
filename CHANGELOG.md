@@ -2,6 +2,7 @@
 
 ## 2026-11-06
 
+- **12:43 Removido:** `bootstate_spoof` fora do build (`obj-y` tirado do `init/Makefile`) — o v4.16 BOOTLOOPOU no r8q; causa provável (NÃO confirmada, o pstore não guardou o panic): a escrita in-place no `saved_command_line`/bootargs do `/chosen` cai em memória protegida pelo RKP/KDP da Samsung. Aparelho recuperado por re-flash do boot v4.15 via TWRP+adb. `init/bootstate_spoof.c` mantido só como referência com aviso SHELVED; `build.sh` → v4.17 (v4.16 fica marcado como o build quebrado) ([ee37366](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/ee373666f), [docs/bootstate-spoof.md](docs/bootstate-spoof.md))
 - **11:56 Alterado:** `build.sh` sobe v4.15 → v4.16 (`VERSION`/`MOD_VERSION`/`MOD_VERSIONCODE` 4150→4160); v4.15 já saiu com outros bytes e o bootstate spoof muda o kernel, então o `LOCALVERSION` rebakeia o `uname`: `4.19.113-NetHunter_matheuslive_r8q_v4.16` (confirmado em `utsrelease.h` e no banner da `vmlinux`) ([b99fd73](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/b99fd7386))
 - **11:50 Implementado:** spoof de `verifiedbootstate`→`green` e `warranty_bit`→0 no cmdline via `init/bootstate_spoof.c` (replace_token in-place de mesmo comprimento no `saved_command_line` e nos bootargs da prop `/chosen`, `late_initcall` após o dm-android-verity) ([2cde07c](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/2cde07c3d), [docs/bootstate-spoof.md](docs/bootstate-spoof.md))
 
