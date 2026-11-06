@@ -3,12 +3,26 @@
  * *** SHELVED / NAO COMPILAR ***
  * Este approach BOOTLOOPA no Galaxy S20 FE (r8q). Gravado no kernel v4.16
  * (2026-11-06) causou bootloop; o aparelho foi recuperado por re-flash do
- * boot v4.15. O patch esta tecnicamente correto, mas o device o rejeita --
- * causa provavel (NAO confirmada; o pstore nao guardou o panic): a escrita
- * in-place no saved_command_line e/ou na prop bootargs do /chosen cai em
- * memoria protegida pelo RKP/KDP da Samsung (reset em violacao). Removido do
- * init/Makefile (obj-y); mantido so como referencia. Ver
- * docs/bootstate-spoof.md. NAO re-adicionar ao build sem contornar o RKP/KDP.
+ * boot v4.15. Removido do init/Makefile (obj-y); mantido so como referencia.
+ * Ver docs/bootstate-spoof.md.
+ *
+ * CAUSA CONFIRMADA (last_kmsg do boot v4.16, 6 oops): "Unable to handle
+ * kernel write to read-only memory" em replace_token <- spoof_buf, na
+ * escrita IN-PLACE em prop->value da "bootargs" do /chosen. No arm64, o
+ * unflatten_device_tree() nao copia os valores das propriedades: prop->value
+ * aponta para dentro do FDT, e setup_machine_fdt() remapeia o FDT no fixmap
+ * como PAGE_KERNEL_RO (arch/arm64/kernel/setup.c). Foi a protecao de pagina
+ * normal do kernel, NAO o RKP/KDP da Samsung (hipotese anterior, descartada).
+ *
+ * Um spoof correto do DT teria de TROCAR a propriedade inteira com
+ * of_update_property(np, newprop), com uma struct property nova e um value
+ * novo alocados (kzalloc/kmemdup), nunca escrever em prop->value.
+ *
+ * O saved_command_line e outro caso: a escrita nele vem antes no codigo e
+ * nao foi ela que falhou no oops. Isso NAO prova que seja segura -- so que
+ * nao foi a causa observada.
+ *
+ * NAO re-adicionar ao build como esta.
  */
 /*
  * bootstate_spoof.c - oculta o estado real do bootloader das fontes que o

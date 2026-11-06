@@ -4,14 +4,26 @@
 >
 > **Este approach BOOTLOOPA neste aparelho (Galaxy S20 FE, r8q).** Gravado no kernel
 > v4.16 em 2026-11-06, causou bootloop; o aparelho foi recuperado por re-flash do boot
-> v4.15. O patch está tecnicamente correto, mas o device o rejeita — causa provável
-> (não confirmada; o pstore não guardou o panic): a escrita in-place no
-> `saved_command_line` e/ou na prop `bootargs` do `/chosen` cai em memória protegida
-> pelo **RKP/KDP** da Samsung (reset em violação). Hipótese alternativa: mismatch
-> "userspace diz `green` × o TEE sabe `unlocked`" disparando reset da TIMA. Approach
-> **descartado/shelved**: o `obj-y += bootstate_spoof.o` foi removido do `init/Makefile`;
-> `init/bootstate_spoof.c` fica só como referência. Não recompilar sem contornar o
-> RKP/KDP.
+> v4.15. Approach **shelved**: o `obj-y += bootstate_spoof.o` foi removido do
+> `init/Makefile`; `init/bootstate_spoof.c` fica só como referência. Não recompilar como
+> está.
+>
+> **Causa confirmada** (pelo `/proc/last_kmsg` do boot v4.16, com 6 oops): `Unable to
+> handle kernel write to read-only memory` em `replace_token` ← `spoof_buf`, na escrita
+> **in-place** em `prop->value` da propriedade `bootargs` do `/chosen`. No arm64 o
+> `unflatten_device_tree()` não copia os valores das propriedades: `prop->value` aponta
+> para dentro do FDT ([`drivers/of/fdt.c`](../drivers/of/fdt.c), `populate_properties`), e
+> o `setup_machine_fdt()` remapeia o FDT no fixmap como `PAGE_KERNEL_RO` depois do scan
+> inicial ([`arch/arm64/kernel/setup.c`](../arch/arm64/kernel/setup.c)). Foi a proteção
+> de página normal do kernel, **não** o RKP/KDP da Samsung (a hipótese anterior, agora
+> descartada).
+>
+> **Como seria um spoof correto do DT:** trocar a propriedade inteira com
+> `of_update_property(np, newprop)`, com uma `struct property` nova e um `value` novo
+> alocados (`kzalloc`/`kmemdup`), em vez de escrever em `prop->value`.
+>
+> **`saved_command_line` é outro caso:** a escrita nele vem antes no código e não foi ela
+> que falhou no oops. Isso não prova que ela seja segura, só que não foi a causa observada.
 
 O bootloader passa, pelo cmdline (nó `chosen/bootargs` do device tree), os tokens que
 denunciam o estado real do aparelho:
