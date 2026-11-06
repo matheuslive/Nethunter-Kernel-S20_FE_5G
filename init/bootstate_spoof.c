@@ -1,5 +1,16 @@
 // SPDX-License-Identifier: GPL-2.0
 /*
+ * *** SHELVED / NAO COMPILAR ***
+ * Este approach BOOTLOOPA no Galaxy S20 FE (r8q). Gravado no kernel v4.16
+ * (2026-11-06) causou bootloop; o aparelho foi recuperado por re-flash do
+ * boot v4.15. O patch esta tecnicamente correto, mas o device o rejeita --
+ * causa provavel (NAO confirmada; o pstore nao guardou o panic): a escrita
+ * in-place no saved_command_line e/ou na prop bootargs do /chosen cai em
+ * memoria protegida pelo RKP/KDP da Samsung (reset em violacao). Removido do
+ * init/Makefile (obj-y); mantido so como referencia. Ver
+ * docs/bootstate-spoof.md. NAO re-adicionar ao build sem contornar o RKP/KDP.
+ */
+/*
  * bootstate_spoof.c - oculta o estado real do bootloader das fontes que o
  * kernel expoe ao userspace via /proc.
  *

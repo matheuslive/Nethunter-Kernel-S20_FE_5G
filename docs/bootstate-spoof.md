@@ -1,5 +1,18 @@
 # Ocultar o estado do bootloader em `/proc` (bootstate spoof)
 
+> ## ❌ SHELVED — NÃO COMPILAR
+>
+> **Este approach BOOTLOOPA neste aparelho (Galaxy S20 FE, r8q).** Gravado no kernel
+> v4.16 em 2026-11-06, causou bootloop; o aparelho foi recuperado por re-flash do boot
+> v4.15. O patch está tecnicamente correto, mas o device o rejeita — causa provável
+> (não confirmada; o pstore não guardou o panic): a escrita in-place no
+> `saved_command_line` e/ou na prop `bootargs` do `/chosen` cai em memória protegida
+> pelo **RKP/KDP** da Samsung (reset em violação). Hipótese alternativa: mismatch
+> "userspace diz `green` × o TEE sabe `unlocked`" disparando reset da TIMA. Approach
+> **descartado/shelved**: o `obj-y += bootstate_spoof.o` foi removido do `init/Makefile`;
+> `init/bootstate_spoof.c` fica só como referência. Não recompilar sem contornar o
+> RKP/KDP.
+
 O bootloader passa, pelo cmdline (nó `chosen/bootargs` do device tree), os tokens que
 denunciam o estado real do aparelho:
 

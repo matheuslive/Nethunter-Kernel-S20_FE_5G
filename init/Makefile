@@ -14,7 +14,6 @@ obj-$(CONFIG_GENERIC_CALIBRATE_DELAY) += calibrate.o
 obj-$(CONFIG_CFP)			   += cfp.o
 
 obj-y                          += init_task.o
-obj-y                          += bootstate_spoof.o
 
 mounts-y			:= do_mounts.o
 mounts-$(CONFIG_BLK_DEV_RAM)	+= do_mounts_rd.o
