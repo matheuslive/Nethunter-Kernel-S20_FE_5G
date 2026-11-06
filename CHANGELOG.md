@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-06
+
+- **11:56 Alterado:** `build.sh` sobe v4.15 → v4.16 (`VERSION`/`MOD_VERSION`/`MOD_VERSIONCODE` 4150→4160); v4.15 já saiu com outros bytes e o bootstate spoof muda o kernel, então o `LOCALVERSION` rebakeia o `uname`: `4.19.113-NetHunter_matheuslive_r8q_v4.16` (confirmado em `utsrelease.h` e no banner da `vmlinux`) ([b99fd73](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/b99fd7386))
+- **11:50 Implementado:** spoof de `verifiedbootstate`→`green` e `warranty_bit`→0 no cmdline via `init/bootstate_spoof.c` (replace_token in-place de mesmo comprimento no `saved_command_line` e nos bootargs da prop `/chosen`, `late_initcall` após o dm-android-verity) ([2cde07c](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/2cde07c3d), [docs/bootstate-spoof.md](docs/bootstate-spoof.md))
+
 ## 2026-11-04
 
 - **12:18 Alterado:** comentário do hexpatch `skip_initramfs`→`want_initramfs` no `tools/flash-booted.sh`: faz o kernel usar o ramdisk do boot (stock ou Magisk), validado na v4.15 ([222c43e](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/222c43ee2))
