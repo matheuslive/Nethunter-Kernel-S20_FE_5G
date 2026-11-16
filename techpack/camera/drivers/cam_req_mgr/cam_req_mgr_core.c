@@ -2096,7 +2096,7 @@ int cam_req_mgr_process_flush_req(void *priv, void *data)
 	mutex_lock(&link->req.lock);
 	if (flush_info->flush_type == CAM_REQ_MGR_FLUSH_TYPE_ALL) {
 		link->last_flush_id = flush_info->req_id;
-		CAM_INFO(CAM_CRM, "Last request id to flush is %lld",
+		CAM_DBG(CAM_CRM, "Last request id to flush is %lld",
 			flush_info->req_id);
 		__cam_req_mgr_flush_req_slot(link);
 	} else if (flush_info->flush_type ==
@@ -3714,7 +3714,7 @@ int cam_req_mgr_link_control(struct cam_req_mgr_link_control *control)
 			}
 		} else if (control->ops == CAM_REQ_MGR_LINK_DEACTIVATE) {
 			/* notify nodes */
-			CAM_INFO(CAM_CRM, "link state in activate %d",
+			CAM_DBG(CAM_CRM, "link state in activate %d",
 				link->state);
 			for (j = 0; j < link->num_devs; j++) {
 				dev = &link->l_dev[j];

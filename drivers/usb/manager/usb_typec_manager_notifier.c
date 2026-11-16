@@ -82,8 +82,11 @@ static int manager_notifier_notify(void *data)
 {
 	MANAGER_NOTI_TYPEDEF manager_noti = *(MANAGER_NOTI_TYPEDEF *)data;
 	int ret = 0;
+	/* PS_RDY de rotina com cabo ligado (~13/min carregando por PD): debug */
+	bool quiet = manager_noti.id == CCIC_NOTIFY_ID_POWER_STATUS && manager_noti.sub1;
 
-	pr_info("%s: src:%s dest:%s id:%s "
+	if (quiet)
+		pr_debug("%s: src:%s dest:%s id:%s "
 		"sub1:%02x sub2:%02x sub3:%02x\n", __func__,
 		(manager_noti.src < CCIC_NOTI_DEST_NUM) ?
 		CCIC_NOTI_DEST_Print[manager_noti.src]:"unknown",
@@ -92,6 +95,16 @@ static int manager_notifier_notify(void *data)
 		(manager_noti.id < CCIC_NOTI_ID_NUM) ?
 		CCIC_NOTI_ID_Print[manager_noti.id]:"unknown",
 		manager_noti.sub1, manager_noti.sub2, manager_noti.sub3);
+	else
+		pr_info("%s: src:%s dest:%s id:%s "
+			"sub1:%02x sub2:%02x sub3:%02x\n", __func__,
+			(manager_noti.src < CCIC_NOTI_DEST_NUM) ?
+			CCIC_NOTI_DEST_Print[manager_noti.src]:"unknown",
+			(manager_noti.dest < CCIC_NOTI_DEST_NUM) ?
+			CCIC_NOTI_DEST_Print[manager_noti.dest]:"unknown",
+			(manager_noti.id < CCIC_NOTI_ID_NUM) ?
+			CCIC_NOTI_ID_Print[manager_noti.id]:"unknown",
+			manager_noti.sub1, manager_noti.sub2, manager_noti.sub3);
 
 	if (manager_noti.dest == CCIC_NOTIFY_DEV_DP) {
 		if (manager_noti.id == CCIC_NOTIFY_ID_DP_CONNECT) {
@@ -162,7 +175,10 @@ static int manager_notifier_notify(void *data)
 	switch (ret) {
 	case NOTIFY_DONE:
 	case NOTIFY_OK:
-		pr_info("%s: notify done(0x%x)\n", __func__, ret);
+		if (quiet)
+			pr_debug("%s: notify done(0x%x)\n", __func__, ret);
+		else
+			pr_info("%s: notify done(0x%x)\n", __func__, ret);
 		break;
 	case NOTIFY_STOP_MASK:
 	case NOTIFY_BAD:
@@ -233,9 +249,14 @@ void manager_event_work(int src, int dest, int id, int sub1, int sub2, int sub3)
 {
 	struct typec_manager_event_work * event_work;
 
-	pr_info("%s src:%s dest:%s\n", __func__,
+	if (id == CCIC_NOTIFY_ID_POWER_STATUS && sub1)	/* PS_RDY de rotina */
+		pr_debug("%s src:%s dest:%s\n", __func__,
 		(src<CCIC_NOTI_DEST_NUM)? CCIC_NOTI_DEST_Print[src]:"unknown",
 		(dest<CCIC_NOTI_DEST_NUM)? CCIC_NOTI_DEST_Print[dest]:"unknown");
+	else
+		pr_info("%s src:%s dest:%s\n", __func__,
+			(src<CCIC_NOTI_DEST_NUM)? CCIC_NOTI_DEST_Print[src]:"unknown",
+			(dest<CCIC_NOTI_DEST_NUM)? CCIC_NOTI_DEST_Print[dest]:"unknown");
 	event_work = kmalloc(sizeof(struct typec_manager_event_work), GFP_ATOMIC);
 	if (!event_work) {
 		pr_err("%s: failed to alloc for event_work\n", __func__);
@@ -688,11 +709,18 @@ static int manager_handle_ccic_notification(struct notifier_block *nb,
 	MANAGER_NOTI_TYPEDEF p_noti = *(MANAGER_NOTI_TYPEDEF *)data;
 	int ret = 0;
 
-	pr_info("%s: src:%s dest:%s id:%s attach/rid:%d\n", __func__,
+	if (p_noti.id == CCIC_NOTIFY_ID_POWER_STATUS && p_noti.sub1)	/* PS_RDY de rotina */
+		pr_debug("%s: src:%s dest:%s id:%s attach/rid:%d\n", __func__,
 		(p_noti.src < CCIC_NOTI_DEST_NUM) ? CCIC_NOTI_DEST_Print[p_noti.src]:"unknown",
 		(p_noti.dest < CCIC_NOTI_DEST_NUM) ? CCIC_NOTI_DEST_Print[p_noti.dest]:"unknown",
 		(p_noti.id < CCIC_NOTI_ID_NUM) ? CCIC_NOTI_ID_Print[p_noti.id]:"unknown",
 		p_noti.sub1);
+	else
+		pr_info("%s: src:%s dest:%s id:%s attach/rid:%d\n", __func__,
+			(p_noti.src < CCIC_NOTI_DEST_NUM) ? CCIC_NOTI_DEST_Print[p_noti.src]:"unknown",
+			(p_noti.dest < CCIC_NOTI_DEST_NUM) ? CCIC_NOTI_DEST_Print[p_noti.dest]:"unknown",
+			(p_noti.id < CCIC_NOTI_ID_NUM) ? CCIC_NOTI_ID_Print[p_noti.id]:"unknown",
+			p_noti.sub1);
 
 #if defined(CONFIG_VBUS_NOTIFIER)
 	if (p_noti.src != CCIC_NOTIFY_ID_INITIAL)

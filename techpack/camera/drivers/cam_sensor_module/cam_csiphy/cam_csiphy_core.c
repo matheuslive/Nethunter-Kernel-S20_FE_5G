@@ -580,7 +580,7 @@ int32_t cam_cmd_buf_parser(struct csiphy_device *csiphy_dev,
 	csiphy_dev->csiphy_info.secure_mode[offset] =
 		CAM_SECURE_MODE_NON_SECURE;
 
-	CAM_INFO(CAM_CSIPHY, "security mode = %d", cam_cmd_csiphy_info->secure_mode);
+	CAM_DBG(CAM_CSIPHY, "security mode = %d", cam_cmd_csiphy_info->secure_mode);
 	if (cam_cmd_csiphy_info->secure_mode == 1)
 		cam_csiphy_update_secure_info(csiphy_dev,
 			cam_cmd_csiphy_info, cfg_dev);
@@ -1031,7 +1031,7 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 
 		struct cam_create_dev_hdl bridge_params;
 
-		CAM_INFO(CAM_CSIPHY, "phy ACQUIRE_DEV");
+		CAM_DBG(CAM_CSIPHY, "phy ACQUIRE_DEV");
 		if (csiphy_dev->csiphy_state == CAM_CSIPHY_START) {
 			CAM_ERR(CAM_CSIPHY,
 				"Not in right state to acquire : %d",
@@ -1144,7 +1144,7 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		int32_t offset, rc = 0;
 		struct cam_start_stop_dev_cmd config;
 
-		CAM_INFO(CAM_CSIPHY, "phy STOP_DEV");
+		CAM_DBG(CAM_CSIPHY, "phy STOP_DEV");
 		rc = copy_from_user(&config, (void __user *)cmd->handle,
 					sizeof(config));
 		if (rc < 0) {
@@ -1205,7 +1205,7 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 	case CAM_RELEASE_DEV: {
 		struct cam_release_dev_cmd release;
 
-		CAM_INFO(CAM_CSIPHY, "phy RELEASE_DEV");
+		CAM_DBG(CAM_CSIPHY, "phy RELEASE_DEV");
 #if defined(CONFIG_SEC_BLOOMXQ_PROJECT)
 		phy_base[csiphy_dev->soc_info.index] = NULL;
 #endif
@@ -1263,7 +1263,7 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 	case CAM_CONFIG_DEV: {
 		struct cam_config_dev_cmd config;
 
-		CAM_INFO(CAM_CSIPHY, "phy CONFIG_DEV");
+		CAM_DBG(CAM_CSIPHY, "phy CONFIG_DEV");
 		if (csiphy_dev->csiphy_state != CAM_CSIPHY_ACQUIRE) {
 			CAM_ERR(CAM_CSIPHY,
 				"Not in right state for config %s state %d",
@@ -1292,7 +1292,7 @@ int32_t cam_csiphy_core_cfg(void *phy_dev,
 		struct cam_start_stop_dev_cmd config;
 		int32_t offset;
 
-		CAM_INFO(CAM_CSIPHY, "phy START_DEV");
+		CAM_DBG(CAM_CSIPHY, "phy START_DEV");
 		rc = copy_from_user(&config, (void __user *)cmd->handle,
 			sizeof(config));
 		if (rc < 0) {

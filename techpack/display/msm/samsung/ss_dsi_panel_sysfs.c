@@ -4555,7 +4555,7 @@ static ssize_t vrr_show(struct device *dev,
 	if(refresh_rate == 96 || refresh_rate == 120)
 		sot_hs_mode = 1;
 
-	LCD_INFO("%d %d\n",	vdd->vrr.cur_refresh_rate, sot_hs_mode);
+	LCD_DEBUG("%d %d\n",	vdd->vrr.cur_refresh_rate, sot_hs_mode);	/* leitura de sysfs */
 
 	return snprintf(buf, 10, "%d %d\n",
 			vdd->vrr.cur_refresh_rate, sot_hs_mode);

@@ -1348,7 +1348,7 @@ static ssize_t ar_mode_store(struct device *dev,
 	int32_t msg_buf[2] = {OPTION_TYPE_SSC_AUTO_ROTATION_MODE, 0};
 
 	msg_buf[1] = buf[0] - 48;
-	pr_info("[FACTORY]%s: ar_mode:%d\n", __func__, msg_buf[1]);
+	pr_debug("[FACTORY]%s: ar_mode:%d\n", __func__, msg_buf[1]);	/* ~15/min */
 	adsp_unicast(msg_buf, sizeof(msg_buf),
 		MSG_SSC_CORE, 0, MSG_TYPE_OPTION_DEFINE);
 

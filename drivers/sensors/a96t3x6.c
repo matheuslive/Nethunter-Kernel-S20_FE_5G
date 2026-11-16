@@ -779,11 +779,11 @@ static int a96t3x6_ccic_handle_notification(struct notifier_block *nb,
 	static int pre_attach = -1;
 	u8 cmd = CMD_ON;
 
+	if (pre_attach == usb_typec_info.attach)
+		return 0;	/* sem mudanca: a cada PS_RDY (~13/min carregando por PD) */
+
 	GRIP_INFO("src = %d, id = %d, attach = %d",
 			usb_typec_info.src, usb_typec_info.id, usb_typec_info.attach);
-
-	if (pre_attach == usb_typec_info.attach)
-		return 0;
 
 	if (usb_typec_info.src == CCIC_NOTIFY_DEV_CCIC &&
 		usb_typec_info.dest == CCIC_NOTIFY_DEV_BATTERY) { /*for PD TA*/

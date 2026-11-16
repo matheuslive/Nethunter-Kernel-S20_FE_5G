@@ -202,13 +202,17 @@ static void ccic_uevent_work(int id, int state)
 int ccic_notifier_notify(CC_NOTI_TYPEDEF *p_noti, void *pd, int pdic_attach)
 {
 	int ret = 0;
+	/* PS_RDY de rotina com cabo ligado (~13/min carregando por PD): debug */
+	bool quiet = p_noti->id == CCIC_NOTIFY_ID_POWER_STATUS &&
+		((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach;
 
 	ccic_notifier.ccic_template = *p_noti;
 
 	switch (p_noti->id) {
 #ifdef CONFIG_USB_TYPEC_MANAGER_NOTIFIER
 	case CCIC_NOTIFY_ID_POWER_STATUS:		/* PDIC_NOTIFY_EVENT_PD_SINK */
-		pr_info("%s: src:%01x dest:%01x id:%02x "
+		if (quiet)
+			pr_debug("%s: src:%01x dest:%01x id:%02x "
 			"attach:%02x cable_type:%02x rprd:%01x\n", __func__,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->src,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->dest,
@@ -216,6 +220,15 @@ int ccic_notifier_notify(CC_NOTI_TYPEDEF *p_noti, void *pd, int pdic_attach)
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->cable_type,
 			((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->rprd);
+		else
+			pr_info("%s: src:%01x dest:%01x id:%02x "
+				"attach:%02x cable_type:%02x rprd:%01x\n", __func__,
+				((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->src,
+				((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->dest,
+				((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->id,
+				((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach,
+				((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->cable_type,
+				((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->rprd);
 
 		if (pd != NULL) {
 			if (!((CC_NOTI_ATTACH_TYPEDEF *)p_noti)->attach &&
@@ -312,7 +325,10 @@ int ccic_notifier_notify(CC_NOTI_TYPEDEF *p_noti, void *pd, int pdic_attach)
 		break;
 	case NOTIFY_DONE:
 	case NOTIFY_OK:
-		pr_info("%s: notify done(0x%x)\n", __func__, ret);
+		if (quiet)
+			pr_debug("%s: notify done(0x%x)\n", __func__, ret);
+		else
+			pr_info("%s: notify done(0x%x)\n", __func__, ret);
 		break;
 	default:
 		pr_info("%s: notify status unknown(0x%x)\n", __func__, ret);

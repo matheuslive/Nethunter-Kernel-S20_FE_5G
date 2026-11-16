@@ -246,11 +246,11 @@ int cam_sensor_wait_stream_on(struct cam_sensor_ctrl_t *s_ctrl)
 #else
 			if ((frame_cnt != 0xFF) &&	(frame_cnt > 0)) {
 #endif
-				CAM_INFO(CAM_SENSOR, "[CNT_DBG] 0x%x : Last frame_cnt 0x%x",
+				CAM_DBG(CAM_SENSOR, "[CNT_DBG] 0x%x : Last frame_cnt 0x%x",
 					s_ctrl->sensordata->slave_info.sensor_id, frame_cnt);
 				return 0;
 			}
-			CAM_INFO(CAM_SENSOR, "[CNT_DBG] retry cnt : %d, Stream off, frame_cnt : 0x%x", retry_cnt, frame_cnt);
+			CAM_DBG(CAM_SENSOR, "[CNT_DBG] retry cnt : %d, Stream off, frame_cnt : 0x%x", retry_cnt, frame_cnt);
 			retry_cnt--;
 			usleep_range(5000, 6000);
 		} while ((frame_cnt < 0x01 || frame_cnt == 0xFF) && (retry_cnt > 0));
@@ -298,7 +298,7 @@ int cam_sensor_wait_stream_off(struct cam_sensor_ctrl_t *s_ctrl)
   			if (frame_cnt == 0xFF)
 				return 0;
 #endif
-			CAM_INFO(CAM_SENSOR, "[CNT_DBG] retry cnt : %d, Stream off, frame_cnt : 0x%x", retry_cnt, frame_cnt);
+			CAM_DBG(CAM_SENSOR, "[CNT_DBG] retry cnt : %d, Stream off, frame_cnt : 0x%x", retry_cnt, frame_cnt);
 			retry_cnt--;
 			usleep_range(5000, 6000);
 		} while ((frame_cnt != 0xFF) && (retry_cnt > 0));
@@ -1321,7 +1321,7 @@ int cam_sensor_match_id(struct cam_sensor_ctrl_t *s_ctrl)
 		CAMERA_SENSOR_I2C_TYPE_WORD);
 
 	chipid = cam_sensor_id_by_mask(s_ctrl, chipid);
-	CAM_INFO(CAM_SENSOR, "read id: 0x%x expected id 0x%x:",
+	CAM_DBG(CAM_SENSOR, "read id: 0x%x expected id 0x%x:",
 		chipid, slave_info->sensor_id);
 
 	if (chipid != slave_info->sensor_id) {
@@ -1760,7 +1760,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 #endif
 		s_ctrl->sensor_state = CAM_SENSOR_ACQUIRE;
 		s_ctrl->last_flush_req = 0;
-		CAM_INFO(CAM_SENSOR,
+		CAM_DBG(CAM_SENSOR,
 			"CAM_ACQUIRE_DEV Success, sensor_id:0x%x,sensor_slave_addr:0x%x",
 			s_ctrl->sensordata->slave_info.sensor_id,
 			s_ctrl->sensordata->slave_info.sensor_slave_addr);
@@ -1818,7 +1818,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		s_ctrl->bridge_intf.session_hdl = -1;
 
 		s_ctrl->sensor_state = CAM_SENSOR_INIT;
-		CAM_INFO(CAM_SENSOR,
+		CAM_DBG(CAM_SENSOR,
 			"CAM_RELEASE_DEV Success, sensor_id:0x%x,sensor_slave_addr:0x%x",
 			s_ctrl->sensordata->slave_info.sensor_id,
 			s_ctrl->sensordata->slave_info.sensor_slave_addr);
@@ -1881,7 +1881,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 			}
 		}
 		s_ctrl->sensor_state = CAM_SENSOR_START;
-		CAM_INFO(CAM_SENSOR,
+		CAM_DBG(CAM_SENSOR,
 			"CAM_START_DEV Success, sensor_id:0x%x,sensor_slave_addr:0x%x",
 			s_ctrl->sensordata->slave_info.sensor_id,
 			s_ctrl->sensordata->slave_info.sensor_slave_addr);
@@ -1912,7 +1912,7 @@ int32_t cam_sensor_driver_cmd(struct cam_sensor_ctrl_t *s_ctrl,
 		cam_sensor_release_per_frame_resource(s_ctrl);
 		s_ctrl->last_flush_req = 0;
 		s_ctrl->sensor_state = CAM_SENSOR_ACQUIRE;
-		CAM_INFO(CAM_SENSOR,
+		CAM_DBG(CAM_SENSOR,
 			"CAM_STOP_DEV Success, sensor_id:0x%x,sensor_slave_addr:0x%x",
 			s_ctrl->sensordata->slave_info.sensor_id,
 			s_ctrl->sensordata->slave_info.sensor_slave_addr);

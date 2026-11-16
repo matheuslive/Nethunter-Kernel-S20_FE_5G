@@ -4900,7 +4900,7 @@ static void cam_icp_mgr_flush_info_dump(
 	int i;
 
 	for (i = 0; i < flush_args->num_req_active; i++) {
-		CAM_INFO(CAM_ICP, "Flushing active request %lld in ctx %u",
+		CAM_DBG(CAM_ICP, "Flushing active request %lld in ctx %u",
 			*(int64_t *)flush_args->flush_req_active[i],
 			ctx_id);
 	}

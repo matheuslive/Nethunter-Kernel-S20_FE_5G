@@ -394,7 +394,7 @@ static int cam_vfe_camif_ver3_resource_start(
 #else
 	rsrc_data->cam_common_cfg.input_mux_sel_pp = 0x0;
 #endif
-	CAM_INFO(CAM_ISP,"sbi, input_mux_sel_pp = 0x%x", rsrc_data->cam_common_cfg.input_mux_sel_pp );
+	CAM_DBG(CAM_ISP,"sbi, input_mux_sel_pp = 0x%x", rsrc_data->cam_common_cfg.input_mux_sel_pp );
 
 	if ((rsrc_data->dsp_mode >= CAM_ISP_DSP_MODE_ONE_WAY) &&
 		(rsrc_data->dsp_mode <= CAM_ISP_DSP_MODE_ROUND)) {

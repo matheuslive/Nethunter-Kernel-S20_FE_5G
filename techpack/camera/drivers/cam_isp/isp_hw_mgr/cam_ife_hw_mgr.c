@@ -2800,7 +2800,7 @@ static int cam_ife_mgr_acquire_hw(void *hw_mgr_priv, void *acquire_hw_args)
 		acquire_hw_info->num_inputs;
 
 	getnstimeofday64(&ife_ctx->ts);
-	CAM_INFO(CAM_ISP,
+	CAM_DBG(CAM_ISP,
 		"Acquire HW success with total_pix: %u total_rdi: %u is_dual: %u in ctx: %u",
 		total_pix_port, total_rdi_port,
 		ife_ctx->is_dual, ife_ctx->ctx_index);
@@ -3039,7 +3039,7 @@ static int cam_ife_mgr_acquire_dev(void *hw_mgr_priv, void *acquire_hw_args)
 	acquire_args->ctxt_to_hw_map = ife_ctx;
 	ife_ctx->ctx_in_use = 1;
 
-	CAM_INFO(CAM_ISP,
+	CAM_DBG(CAM_ISP,
 		"Acquire HW success with total_pix: %u total_rdi: %u is_dual: %u in ctx: %u",
 		total_pix_port, total_rdi_port,
 		ife_ctx->is_dual, ife_ctx->ctx_index);
@@ -4258,7 +4258,7 @@ static int cam_ife_mgr_release_hw(void *hw_mgr_priv,
 		ctx->epoch_cnt[i] = 0;
 	}
 
-	CAM_INFO(CAM_ISP, "Release HW success ctx id: %u",
+	CAM_DBG(CAM_ISP, "Release HW success ctx id: %u",
 		ctx->ctx_index);
 
 	memset(&ctx->ts, 0, sizeof(struct timespec64));
@@ -4843,7 +4843,7 @@ static int cam_isp_blob_core_cfg_update(
 
 			if (hw_mgr_res->res_id == CAM_ISP_HW_VFE_IN_CAMIF ||
 				hw_mgr_res->res_id == CAM_ISP_HW_VFE_IN_PDLIB) {
-				CAM_INFO(CAM_ISP, "core cfg for %u",
+				CAM_DBG(CAM_ISP, "core cfg for %u",
 					hw_mgr_res->res_id);
 				hw_intf = hw_mgr_res->hw_res[i]->hw_intf;
 				if (hw_intf && hw_intf->hw_ops.process_cmd) {

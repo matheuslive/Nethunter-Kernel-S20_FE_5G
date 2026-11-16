@@ -227,6 +227,17 @@ void device_pm_move_to_tail(struct device *dev)
 #define DL_ADD_VALID_FLAGS (DL_MANAGED_LINK_FLAGS | DL_FLAG_STATELESS | \
 			    DL_FLAG_PM_RUNTIME | DL_FLAG_RPM_ACTIVE)
 
+/*
+ * O sensor de camera pega e solta os reguladores a cada abertura (o
+ * CameraLightSensor da Samsung abre a frontal a cada ~5 s): os prints de
+ * link/unlink dele vao para debug. Os de outros devices seguem em info.
+ */
+static bool device_link_quiet(struct device *consumer)
+{
+	return consumer->of_node &&
+		of_device_is_compatible(consumer->of_node, "qcom,cam-sensor");
+}
+
 /**
  * device_link_add - Create a link between two devices.
  * @consumer: Consumer end of the link.
@@ -439,7 +450,10 @@ reorder:
 	list_add_tail_rcu(&link->s_node, &supplier->links.consumers);
 	list_add_tail_rcu(&link->c_node, &consumer->links.suppliers);
 
-	dev_info(consumer, "Linked as a consumer to %s\n", dev_name(supplier));
+	if (device_link_quiet(consumer))
+		dev_dbg(consumer, "Linked as a consumer to %s\n", dev_name(supplier));
+	else
+		dev_info(consumer, "Linked as a consumer to %s\n", dev_name(supplier));
 
  out:
 	device_pm_unlock();
@@ -540,8 +554,12 @@ static void __device_link_del(struct kref *kref)
 {
 	struct device_link *link = container_of(kref, struct device_link, kref);
 
-	dev_info(link->consumer, "Dropping the link to %s\n",
-		 dev_name(link->supplier));
+	if (device_link_quiet(link->consumer))
+		dev_dbg(link->consumer, "Dropping the link to %s\n",
+			dev_name(link->supplier));
+	else
+		dev_info(link->consumer, "Dropping the link to %s\n",
+			 dev_name(link->supplier));
 
 	if (link->flags & DL_FLAG_PM_RUNTIME)
 		pm_runtime_drop_link(link->consumer);
@@ -555,8 +573,12 @@ static void __device_link_del(struct kref *kref)
 {
 	struct device_link *link = container_of(kref, struct device_link, kref);
 
-	dev_info(link->consumer, "Dropping the link to %s\n",
-		 dev_name(link->supplier));
+	if (device_link_quiet(link->consumer))
+		dev_dbg(link->consumer, "Dropping the link to %s\n",
+			dev_name(link->supplier));
+	else
+		dev_info(link->consumer, "Dropping the link to %s\n",
+			 dev_name(link->supplier));
 
 	if (link->flags & DL_FLAG_PM_RUNTIME)
 		pm_runtime_drop_link(link->consumer);

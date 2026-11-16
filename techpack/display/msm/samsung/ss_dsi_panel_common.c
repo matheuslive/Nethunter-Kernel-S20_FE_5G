@@ -99,7 +99,7 @@ int ss_panel_attach_set(struct samsung_display_driver_data *vdd, bool attach)
 	else
 		vdd->panel_attach_status = false;
 
-	LCD_INFO("panel_attach_status : %d\n", vdd->panel_attach_status);
+	LCD_DEBUG("panel_attach_status : %d\n", vdd->panel_attach_status);	/* ~25/min */
 
 	return vdd->panel_attach_status;
 }
@@ -5821,7 +5821,7 @@ static void set_normal_br_values(struct samsung_display_driver_data *vdd)
 	} else {
 		if (vdd->br_info.common_br.gamma_mode2_support) {
 			vdd->br_info.common_br.gm2_wrdisbv = table->gm2_wrdisbv[p];
-			LCD_INFO("[%d] cd_idx (%d) cd (%d) gm2_wrdisbv (%d)\n",
+			LCD_DEBUG("[%d] cd_idx (%d) cd (%d) gm2_wrdisbv (%d)\n",
 					p, vdd->br_info.common_br.cd_idx,
 					vdd->br_info.common_br.cd_level,
 					vdd->br_info.common_br.gm2_wrdisbv);
@@ -5897,7 +5897,7 @@ static void set_hbm_br_values(struct samsung_display_driver_data *vdd)
 	} else {
 		if (vdd->br_info.common_br.gamma_mode2_support) {
 			vdd->br_info.common_br.gm2_wrdisbv = table->gm2_wrdisbv[p];
-			LCD_INFO("[%d] cd_idx (%d) cd (%d) gm2_wrdisbv (%d)\n",
+			LCD_DEBUG("[%d] cd_idx (%d) cd (%d) gm2_wrdisbv (%d)\n",
 					p, vdd->br_info.common_br.cd_idx,
 					vdd->br_info.common_br.cd_level,
 					vdd->br_info.common_br.gm2_wrdisbv);
@@ -6711,9 +6711,9 @@ int ss_brightness_dcs(struct samsung_display_driver_data *vdd, int level, int ba
 				if(!locked)
 					mutex_unlock(&vdd->exclusive_tx.ex_tx_lock);
 			} else {
-				LCD_INFO("tx bl cmd +\n");
+				LCD_DEBUG("tx bl cmd +\n");
 				ss_send_cmd(vdd, TX_BRIGHT_CTRL);
-				LCD_INFO("tx bl cmd -\n");
+				LCD_DEBUG("tx bl cmd -\n");
 			}
 
 			if (!IS_ERR_OR_NULL(ss_get_cmds(vdd, TX_BLIC_DIMMING)->cmds)) {
@@ -6734,7 +6734,8 @@ int ss_brightness_dcs(struct samsung_display_driver_data *vdd, int level, int ba
 			if (vdd->poc_driver.is_support)
 				ss_poc_comp(vdd);
 
-			LCD_INFO("[DISPLAY_%d] level : %d  candela : %dCD hbm : %d (%d) itp : %s\n",
+			/* a cada passo do brilho automatico (~13/min) */
+			LCD_DEBUG("[DISPLAY_%d] level : %d  candela : %dCD hbm : %d (%d) itp : %s\n",
 				vdd->ndx,
 				vdd->br_info.common_br.bl_level, vdd->br_info.common_br.cd_level, vdd->display_status_dsi.hbm_mode, vdd->br_info.common_br.auto_level,
 				vdd->br_info.panel_br_info.itp_mode == 0 ? "TABLE" : "FLASH");

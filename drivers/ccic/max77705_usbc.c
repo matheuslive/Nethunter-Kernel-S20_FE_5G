@@ -807,7 +807,7 @@ int max77705_get_pd_support(struct max77705_usbc_platform_data *usbc_data)
 	else
 		msg_maxim("np is null");
 
-	msg_maxim("TYPEC_CLASS: support_pd_role_swap is %d, usbc_data->pd_support : %d",
+	msg_maxim_dbg("TYPEC_CLASS: support_pd_role_swap is %d, usbc_data->pd_support : %d",
 		support_pd_role_swap, usbc_data->pd_support);
 
 	if (support_pd_role_swap && usbc_data->pd_support)
@@ -1298,7 +1298,7 @@ static int max77705_sysfs_get_local_prop(struct _ccic_data_t *pccic_data,
 		retval = sprintf(buf, "%04x:%04x\n",
 				le16_to_cpu(usbpd_data->Vendor_ID),
 				le16_to_cpu(usbpd_data->Product_ID));
-		msg_maxim("usb: CCIC_SYSFS_USBPD_IDS : %s", buf);
+		msg_maxim_dbg("usb: CCIC_SYSFS_USBPD_IDS : %s", buf);	/* 1 por leitura de sysfs */
 		break;
 	case CCIC_SYSFS_PROP_USBPD_TYPE:
 		retval = sprintf(buf, "%d\n", usbpd_data->acc_type);
@@ -2500,7 +2500,7 @@ void max77705_usbc_opcode_write(struct max77705_usbc_platform_data *usbc_data,
 	execute_cmd_data.seq = OPCODE_WRITE_SEQ;
 	enqueue_usbc_cmd(cmd_queue, &execute_cmd_data);
 
-	msg_maxim("W->W opcode[0x%02x] write_length[%d] read_length[%d]",
+	msg_maxim_dbg("W->W opcode[0x%02x] write_length[%d] read_length[%d]",
 		write_op->opcode, write_op->write_length, write_op->read_length);
 
 	front_usbc_cmd(cmd_queue, &current_cmd);
@@ -2549,7 +2549,7 @@ void max77705_usbc_opcode_read(struct max77705_usbc_platform_data *usbc_data,
 	execute_cmd_data.seq = OPCODE_READ_SEQ;
 	enqueue_usbc_cmd(cmd_queue, &execute_cmd_data);
 
-	msg_maxim("R->R opcode[0x%02x] write_length[%d] read_length[%d]",
+	msg_maxim_dbg("R->R opcode[0x%02x] write_length[%d] read_length[%d]",
 		read_op->opcode, read_op->write_length, read_op->read_length);
 
 	front_usbc_cmd(cmd_queue, &current_cmd);

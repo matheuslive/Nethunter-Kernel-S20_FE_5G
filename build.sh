@@ -39,7 +39,7 @@ DEFCONFIG_NAME=wirus_defconfig
 CHIPSET_NAME=kona
 VARIANT=r8q
 ARCH=arm64
-VERSION=NetHunter_matheuslive_${VARIANT}_v4.17
+VERSION=NetHunter_matheuslive_${VARIANT}_v4.18
 JOBS=${JOBS:-$(nproc)}
 KVER=${VERSION##*_}
 
@@ -54,8 +54,8 @@ DTS_DIR=$OUT/arch/$ARCH/boot/dts
 # Versao dos modulos Magisk (versionCode tem que ser inteiro). O sufixo .N
 # marca companion novo sobre o MESMO kernel (vmlinux inalterado): v4.11.1
 # acrescenta os .ko de USB/IP, compilados contra a Image da v4.11 ja gravada.
-MOD_VERSION=v4.17
-MOD_VERSIONCODE=4170
+MOD_VERSION=v4.18
+MOD_VERSIONCODE=4180
 
 # Toolchain versionado no proprio repo. O GCC 4.9 entra so como binutils
 # (as, ld, ar...) via CROSS_COMPILE; quem compila e o clang do REAL_CC.
@@ -362,10 +362,13 @@ done
 
 # Copia para o SD e best-effort: se o celular nao responder, o build nao falha.
 # O nome do ponto de montagem e o UUID do cartao, entao e descoberto na hora --
-# trocar de cartao muda o caminho.
+# trocar de cartao muda o caminho. Desde 2026-11-16 o cartao pode montar em
+# /data/adb/sd (fallback, se for ponto de montagem).
 SD_HOST=${SD_HOST:-root@s20}
 if SD_DIR=$(timeout 15 ssh -o ConnectTimeout=8 -o BatchMode=yes "$SD_HOST" \
-		'ls -d /storage/????-???? 2>/dev/null | head -1' 2>/dev/null) &&
+		'{ ls -d /storage/????-???? 2>/dev/null
+		   mountpoint -q /data/adb/sd 2>/dev/null && echo /data/adb/sd; } | head -1' \
+		2>/dev/null) &&
    [ -n "$SD_DIR" ]; then
 	if timeout 300 scp -q "${ZIPS[@]}" "$SD_HOST:$SD_DIR/" 2>/dev/null; then
 		echo ">> SD do S20 : $SD_HOST:$SD_DIR (${#ZIPS[@]} zips)"

@@ -227,7 +227,7 @@ int cam_vfe_top_ver3_init_hw(void *device_priv,
 	top_priv->hw_clk_rate = 0;
 
 	/* Disable clock gating at top */
-	CAM_INFO(CAM_ISP, "Disable clock gating at IFE top");
+	CAM_DBG(CAM_ISP, "Disable clock gating at IFE top");
 	cam_soc_util_w_mb(common_data.soc_info, VFE_CORE_BASE_IDX,
 		common_data.common_reg->core_cgc_ovd_0, 0xFFFFFFFF);
 

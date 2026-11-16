@@ -1800,7 +1800,7 @@ static ssize_t ssrm_camera_info_show(struct device *dev,
 static ssize_t ssrm_camera_info_store(struct device *dev,
 	struct device_attribute *attr, const char *buf, size_t size)
 {
-	pr_info("ssrm_camera_info buf : %s\n", buf);
+	pr_debug("ssrm_camera_info buf : %s\n", buf);	/* 2 por abertura da camera */
 	scnprintf(ssrm_camera_info, sizeof(ssrm_camera_info), "%s", buf);
 
 	return size;

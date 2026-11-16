@@ -178,7 +178,10 @@ static void max77705_ccic_event_notifier(struct work_struct *data)
 				CCIC_NOTI_USB_STATUS_Print[event_work->event]);
 			break;
 	default:
-			msg_maxim("usb: dest=%s, id=%s, attach=%d, event=%d",
+			/* PS_RDY com cabo ja ligado (~13/min carregando por PD): debug */
+			msg_maxim_cond(event_work->id == CCIC_NOTIFY_ID_POWER_STATUS &&
+				event_work->attach,
+				"usb: dest=%s, id=%s, attach=%d, event=%d",
 				CCIC_NOTI_DEST_Print[event_work->dest],
 				CCIC_NOTI_ID_Print[event_work->id],
 				event_work->attach,
@@ -209,7 +212,8 @@ void max77705_ccic_event_work(void *data, int dest, int id, int attach, int even
 	enum typec_pwr_opmode mode = TYPEC_PWR_MODE_USB;
 #endif
 
-	msg_maxim("usb: DIAES %d-%d-%d-%d-%d", dest, id, attach, event, sub);
+	msg_maxim_cond(id == CCIC_NOTIFY_ID_POWER_STATUS && attach,
+		"usb: DIAES %d-%d-%d-%d-%d", dest, id, attach, event, sub);
 	event_work = kmalloc(sizeof(struct ccic_state_work), GFP_ATOMIC);
 	INIT_WORK(&event_work->ccic_work, max77705_ccic_event_notifier);
 

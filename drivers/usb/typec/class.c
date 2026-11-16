@@ -1399,9 +1399,12 @@ void typec_set_pwr_opmode(struct typec_port *port,
 {
 	struct device *partner_dev;
 
-	pr_info("%s pwr_opmode=%d opmode=%d\n", __func__, port->pwr_opmode, opmode);
-	if (port->pwr_opmode == opmode)
+	if (port->pwr_opmode == opmode) {
+		/* sem mudanca: a cada PS_RDY (~13/min carregando por PD) */
+		pr_debug("%s pwr_opmode=%d opmode=%d\n", __func__, port->pwr_opmode, opmode);
 		return;
+	}
+	pr_info("%s pwr_opmode=%d opmode=%d\n", __func__, port->pwr_opmode, opmode);
 
 	port->pwr_opmode = opmode;
 	sysfs_notify(&port->dev.kobj, NULL, "power_operation_mode");

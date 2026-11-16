@@ -8724,6 +8724,13 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 		battery->pdata->nv_charge_power : battery->pdata->pd_charging_charge_power;
 	CC_NOTI_ATTACH_TYPEDEF usb_typec_info = *(CC_NOTI_ATTACH_TYPEDEF *)data;
 	bool bPdIndexChanged = false;
+	/*
+	 * PS_RDY repetido com o PD ja anexado: o direct charger renegocia o PPS a
+	 * cada ~4,5 s (~13 eventos/min, 5 linhas cada). Vai para debug enquanto
+	 * nada mudar; attach, detach e troca de PDO seguem em info.
+	 */
+	bool quiet = usb_typec_info.id == CCIC_NOTIFY_ID_POWER_STATUS &&
+		usb_typec_info.attach && battery->pdic_attach;
 	int max_power = 0;
 #if defined(CONFIG_PDIC_PD30)
 	bool bPrintPDlog = true;
@@ -8733,9 +8740,14 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 #endif
 #endif
 
-	dev_info(battery->dev, "%s: action (%ld) dump(0x%01x, 0x%01x, 0x%02x, 0x%04x, 0x%04x, 0x%04x)\n",
-		__func__, action, usb_typec_info.src, usb_typec_info.dest, usb_typec_info.id,
-		usb_typec_info.attach, usb_typec_info.rprd, usb_typec_info.cable_type);
+	if (quiet)
+		dev_dbg(battery->dev, "%s: action (%ld) dump(0x%01x, 0x%01x, 0x%02x, 0x%04x, 0x%04x, 0x%04x)\n",
+			__func__, action, usb_typec_info.src, usb_typec_info.dest, usb_typec_info.id,
+			usb_typec_info.attach, usb_typec_info.rprd, usb_typec_info.cable_type);
+	else
+		dev_info(battery->dev, "%s: action (%ld) dump(0x%01x, 0x%01x, 0x%02x, 0x%04x, 0x%04x, 0x%04x)\n",
+			__func__, action, usb_typec_info.src, usb_typec_info.dest, usb_typec_info.id,
+			usb_typec_info.attach, usb_typec_info.rprd, usb_typec_info.cable_type);
 
 	if (usb_typec_info.dest != CCIC_NOTIFY_DEV_BATTERY) {
 		dev_info(battery->dev, "%s: skip handler dest(%d)\n",
@@ -8885,11 +8897,13 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 				(*(struct pdic_notifier_struct *)usb_typec_info.pd).sink_status.current_pdo_num;
 			battery->pd_list.now_pd_index = sec_bat_get_pd_list_index(&battery->pdic_info.sink_status,
 				&battery->pd_list);
-			dev_info(battery->dev, "%s: battery->pd_list.now_pd_index(%d), prev_pd_index(%d)\n",
-				__func__, battery->pd_list.now_pd_index, prev_pd_index);
 			if (battery->pd_list.now_pd_index != prev_pd_index) {
 				bPdIndexChanged = true;
-			}
+				dev_info(battery->dev, "%s: battery->pd_list.now_pd_index(%d), prev_pd_index(%d)\n",
+					__func__, battery->pd_list.now_pd_index, prev_pd_index);
+			} else
+				dev_dbg(battery->dev, "%s: battery->pd_list.now_pd_index(%d), prev_pd_index(%d)\n",
+					__func__, battery->pd_list.now_pd_index, prev_pd_index);
 
 			battery->pdic_ps_rdy = true;
 		}
@@ -8898,7 +8912,11 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 			battery->hv_pdo = true;
 		else
 			battery->hv_pdo = false;
-		dev_info(battery->dev, "%s: battery->pdic_ps_rdy(%d), hv_pdo(%d)\n",
+		if (quiet && !bPdIndexChanged)
+			dev_dbg(battery->dev, "%s: battery->pdic_ps_rdy(%d), hv_pdo(%d)\n",
+				__func__, battery->pdic_ps_rdy, battery->hv_pdo);
+		else
+			dev_info(battery->dev, "%s: battery->pdic_ps_rdy(%d), hv_pdo(%d)\n",
 				__func__, battery->pdic_ps_rdy, battery->hv_pdo);
 
 #if defined(CONFIG_PDIC_PD30)
@@ -8928,8 +8946,12 @@ static int usb_typec_handle_notification(struct notifier_block *nb,
 		battery->muic_cable_type = ATTACHED_DEV_NONE_MUIC;
 		battery->input_voltage =
 				battery->pdic_info.sink_status.power_list[current_pdo].max_voltage / 100;
-		dev_info(battery->dev, "%s: available pdo : %d, current pdo : %d\n", __func__,
-			battery->pdic_info.sink_status.available_pdo_num, current_pdo);
+		if (quiet && !bPdIndexChanged)
+			dev_dbg(battery->dev, "%s: available pdo : %d, current pdo : %d\n", __func__,
+				battery->pdic_info.sink_status.available_pdo_num, current_pdo);
+		else
+			dev_info(battery->dev, "%s: available pdo : %d, current pdo : %d\n", __func__,
+				battery->pdic_info.sink_status.available_pdo_num, current_pdo);
 
 		for (i = 1; i <= battery->pdic_info.sink_status.available_pdo_num; i++) {
 			bool isUpdated = false;
@@ -9191,7 +9213,10 @@ skip_cable_check:
 	}
 
 skip_cable_work:
-	dev_info(battery->dev, "%s: CMD[%s], CABLE_TYPE[%d]\n", __func__, cmd, cable_type);
+	if (quiet && !bPdIndexChanged && !strcmp(cmd, "PD_ATTACH"))
+		dev_dbg(battery->dev, "%s: CMD[%s], CABLE_TYPE[%d]\n", __func__, cmd, cable_type);
+	else
+		dev_info(battery->dev, "%s: CMD[%s], CABLE_TYPE[%d]\n", __func__, cmd, cable_type);
 	mutex_unlock(&battery->typec_notylock);
 	return 0;
 }

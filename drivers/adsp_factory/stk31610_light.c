@@ -155,11 +155,12 @@ static ssize_t light_brightness_store(struct device *dev,
 	uint16_t light_idx = get_light_sidx(data);
 
 	brightness = ASCII_TO_DEC(buf[0]) * 100 + ASCII_TO_DEC(buf[1]) * 10 + ASCII_TO_DEC(buf[2]);
-	pr_info("[FACTORY] %s: %d\n", __func__, brightness);
+	/* a cada passo de brilho escrito pelo framework (~34/min): debug */
+	pr_debug("[FACTORY] %s: %d\n", __func__, brightness);
 
 	adsp_unicast(&brightness, sizeof(brightness), light_idx, 0, MSG_TYPE_SET_CAL_DATA);
 
-	pr_info("[FACTORY] %s: done\n", __func__);
+	pr_debug("[FACTORY] %s: done\n", __func__);
 
 	return size;
 }

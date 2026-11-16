@@ -2264,7 +2264,7 @@ static int __cam_isp_ctx_flush_req(struct cam_context *ctx,
 
 	list_for_each_entry_safe(req, req_temp, &flush_list, list) {
 		req_isp = (struct cam_isp_ctx_req *) req->req_priv;
-		CAM_INFO(CAM_ISP, "Flush req 0x%llx",
+		CAM_DBG(CAM_ISP, "Flush req 0x%llx",
 			req->request_id);
 		for (i = 0; i < req_isp->num_fence_map_out; i++) {
 			if (req_isp->fence_map_out[i].sync_id != -1) {
@@ -2323,7 +2323,7 @@ static int __cam_isp_ctx_flush_req_in_top_state(
 		ctx_isp->substate_activated = CAM_ISP_CTX_ACTIVATED_HALT;
 		spin_unlock_bh(&ctx->lock);
 
-		CAM_INFO(CAM_ISP, "Last request id to flush is %lld",
+		CAM_DBG(CAM_ISP, "Last request id to flush is %lld",
 			flush_req->req_id);
 		ctx->last_flush_req = flush_req->req_id;
 
@@ -2336,7 +2336,7 @@ static int __cam_isp_ctx_flush_req_in_top_state(
 			CAM_ERR(CAM_ISP, "Reg dump on flush failed rc: %d", rc);
 			rc = 0;
 		}
-		CAM_INFO(CAM_ISP, "Reg dump complete. Stop HW next.");
+		CAM_DBG(CAM_ISP, "Reg dump complete. Stop HW next.");
 
 		stop_args.ctxt_to_hw_map = ctx_isp->hw_ctx;
 		stop_isp.hw_stop_cmd = CAM_ISP_HW_STOP_IMMEDIATELY;
@@ -2348,7 +2348,7 @@ static int __cam_isp_ctx_flush_req_in_top_state(
 			CAM_ERR(CAM_ISP, "Failed to stop HW in Flush rc: %d",
 				rc);
 
-		CAM_INFO(CAM_ISP, "Stop HW complete. Reset HW next.");
+		CAM_DBG(CAM_ISP, "Stop HW complete. Reset HW next.");
 
 		if (ctx->ctx_crm_intf && ctx->ctx_crm_intf->notify_timer) {
 			timer.link_hdl = ctx->link_hdl;
@@ -2368,7 +2368,7 @@ static int __cam_isp_ctx_flush_req_in_top_state(
 
 		ctx_isp->active_req_cnt = 0;
 		spin_unlock_bh(&ctx->lock);
-		CAM_INFO(CAM_ISP, "Flush complete for wait and active lists");
+		CAM_DBG(CAM_ISP, "Flush complete for wait and active lists");
 
 		reset_args.ctxt_to_hw_map = ctx_isp->hw_ctx;
 		rc = ctx->hw_mgr_intf->hw_reset(ctx->hw_mgr_intf->hw_mgr_priv,

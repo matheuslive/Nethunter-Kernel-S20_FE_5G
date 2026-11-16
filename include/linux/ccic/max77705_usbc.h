@@ -376,4 +376,11 @@ void factory_execute_monitor(int);
 /* Spam por transacao (fila de comandos, IRQ de rotina): so com DEBUG. */
 #define msg_maxim_dbg(format, args...) \
 		pr_debug("max77705: %s: " format "\n", __func__, ## args)
+/* Rotina condicional: debug quando 'quiet', info (como antes) quando nao. */
+#define msg_maxim_cond(quiet, format, args...) do { \
+		if (quiet) \
+			msg_maxim_dbg(format, ## args); \
+		else \
+			msg_maxim(format, ## args); \
+	} while (0)
 #endif

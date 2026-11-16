@@ -153,7 +153,7 @@ static struct dsi_panel_cmd_set *__ss_vrr(struct samsung_display_driver_data *vd
 	}
 
 	if (panel && panel->cur_mode) {
-		LCD_INFO("VRR: cur_mode: %dx%d@%d%s, is_hbm: %d\n",
+		LCD_DEBUG("VRR: cur_mode: %dx%d@%d%s, is_hbm: %d\n",
 				panel->cur_mode->timing.h_active,
 				panel->cur_mode->timing.v_active,
 				panel->cur_mode->timing.refresh_rate,
@@ -178,7 +178,7 @@ static struct dsi_panel_cmd_set *__ss_vrr(struct samsung_display_driver_data *vd
 		vrr_cmds->cmds[0].msg.tx_buf[1] = 0x08; /* 120 HZ */
 	}
 
-	LCD_INFO("VRR: (cur: %d%s, adj: %d%s)\n",
+	LCD_DEBUG("VRR: (cur: %d%s, adj: %d%s)\n",
 			cur_rr,
 			cur_hs ? "HS" : "NM",
 			vrr->adjusted_refresh_rate,
@@ -789,7 +789,7 @@ static struct dsi_panel_cmd_set *ss_acl_on(struct samsung_display_driver_data *v
 
 	pcmds->cmds[2].msg.tx_buf[1] = 0x03;	/* ACL 15% in normal brightness */
 
-	LCD_INFO("gradual_acl: %d, acl per: 0x%x",
+	LCD_DEBUG("gradual_acl: %d, acl per: 0x%x",
 			vdd->br_info.gradual_acl_val, pcmds->cmds[2].msg.tx_buf[1]);
 
 	return pcmds;
@@ -802,7 +802,7 @@ static struct dsi_panel_cmd_set *ss_acl_off(struct samsung_display_driver_data *
 		return NULL;
 	}
 
-	LCD_INFO("ACL off\n");
+	LCD_DEBUG("ACL off\n");
 	return ss_get_cmds(vdd, TX_ACL_OFF);
 }
 

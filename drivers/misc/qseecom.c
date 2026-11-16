@@ -581,7 +581,11 @@ static int qseecom_update_info(bool log)
 	if (num > max_loaded_app_num)
 		max_loaded_app_num = num;
 
-	pr_info("loaded apps : %u/%u\n", num , max_loaded_app_num);
+	/* a cada load/unload de app TZ (~14/min); com log (dump) segue em info */
+	if (log)
+		pr_info("loaded apps : %u/%u\n", num , max_loaded_app_num);
+	else
+		pr_debug("loaded apps : %u/%u\n", num , max_loaded_app_num);
 
 	spin_unlock_irqrestore(&qseecom.registered_app_list_lock, flags);
 

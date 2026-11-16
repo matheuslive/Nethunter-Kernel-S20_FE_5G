@@ -67,7 +67,7 @@ static void max77705_process_pd(struct max77705_usbc_platform_data *usbc_data)
 		pd_noti.sink_status.has_apdo = false;
 	}
 
-	pr_info("%s : current_pdo_num(%d), available_pdo_num(%d), has_apdo(%d)\n", __func__,
+	pr_debug("%s : current_pdo_num(%d), available_pdo_num(%d), has_apdo(%d)\n", __func__,
 		pd_noti.sink_status.current_pdo_num, pd_noti.sink_status.available_pdo_num, pd_noti.sink_status.has_apdo);
 
 	max77705_ccic_event_work(usbc_data, CCIC_NOTIFY_DEV_BATTERY,
@@ -135,7 +135,10 @@ void max77705_response_pdo_request(struct max77705_usbc_platform_data *usbc_data
 {
 	u8 result = data[1];
 
-	pr_info("%s: %s (0x%02X)\n", __func__, result ? "Error," : "Sent,", result);
+	if (result)
+		pr_info("%s: Error, (0x%02X)\n", __func__, result);
+	else	/* a cada request de PPS do direct charger (~7/min) */
+		pr_debug("%s: Sent, (0x%02X)\n", __func__, result);
 
 	switch (result) {
 	case 0x00:
@@ -203,11 +206,14 @@ void max77705_response_apdo_request(struct max77705_usbc_platform_data *usbc_dat
 	u8 status[5];
 	u8 vbvolt;
 
-	pr_info("%s: %s (0x%02X)\n", __func__, result ? "Error," : "Sent,", result);
+	if (result)
+		pr_info("%s: Error, (0x%02X)\n", __func__, result);
+	else	/* a cada request de PPS do direct charger (~7/min) */
+		pr_debug("%s: Sent, (0x%02X)\n", __func__, result);
 
 	switch (result) {
 	case 0x00:
-		pr_info("%s: Sent APDO Request Message to Port Partner(0x%02X)\n", __func__, result);
+		pr_debug("%s: Sent APDO Request Message to Port Partner(0x%02X)\n", __func__, result);
 		break;
 	case 0x01:
 		pr_info("%s: Error, Invalid APDO position(0x%02X)\n", __func__, result);
@@ -286,7 +292,7 @@ int max77705_select_pps(int num, int ppsVol, int ppsCur)
 	pd_noti.sink_status.pps_voltage = ppsVol;
 	pd_noti.sink_status.pps_current = ppsCur;
 
-	pr_info(" %s : PPS PDO(%d), voltage(%d), current(%d) is selected to change\n",
+	pr_debug(" %s : PPS PDO(%d), voltage(%d), current(%d) is selected to change\n",
 		__func__, pd_noti.sink_status.selected_pdo_num, ppsVol, ppsCur);
 
 	init_usbc_cmd_data(&value);
@@ -752,9 +758,15 @@ void max77705_current_pdo(struct max77705_usbc_platform_data *usbc_data, unsigne
 		do_power_nego = true;
 
 	pd_noti.sink_status.available_pdo_num = available_pdo_num;
-	pr_info("%s : current_pdo_num(%d), available_pdo_num(%d/%d) comm(%d) suspend(%d)\n", __func__,
-		pd_noti.sink_status.current_pdo_num, pd_noti.sink_status.available_pdo_num, num_of_pdo,
-		pd_noti.sink_status.power_list[sel_pdo_pos].comm_capable, pd_noti.sink_status.power_list[sel_pdo_pos].suspend);
+	/* so quando a lista de PDOs muda (attach/renegociacao real), nao a cada PS_RDY */
+	if (do_power_nego)
+		pr_info("%s : current_pdo_num(%d), available_pdo_num(%d/%d) comm(%d) suspend(%d)\n", __func__,
+			pd_noti.sink_status.current_pdo_num, pd_noti.sink_status.available_pdo_num, num_of_pdo,
+			pd_noti.sink_status.power_list[sel_pdo_pos].comm_capable, pd_noti.sink_status.power_list[sel_pdo_pos].suspend);
+	else
+		pr_debug("%s : current_pdo_num(%d), available_pdo_num(%d/%d) comm(%d) suspend(%d)\n", __func__,
+			pd_noti.sink_status.current_pdo_num, pd_noti.sink_status.available_pdo_num, num_of_pdo,
+			pd_noti.sink_status.power_list[sel_pdo_pos].comm_capable, pd_noti.sink_status.power_list[sel_pdo_pos].suspend);
 
 	pd_noti.event = PDIC_NOTIFY_EVENT_PD_SINK;
 
@@ -925,7 +937,7 @@ void max77705_check_pdo(struct max77705_usbc_platform_data *usbc_data)
 	value.read_length = 31;
 	max77705_usbc_opcode_read(usbc_data, &value);
 
-	pr_info("%s : OPCODE(0x%02x) W_LENGTH(%d) R_LENGTH(%d)\n",
+	pr_debug("%s : OPCODE(0x%02x) W_LENGTH(%d) R_LENGTH(%d)\n",
 		__func__, value.opcode, value.write_length, value.read_length);
 
 }
@@ -978,7 +990,7 @@ static void max77705_pd_check_pdmsg(struct max77705_usbc_platform_data *usbc_dat
 
 	VDM_MSG_IRQ_State.DATA = 0x0;
 	init_usbc_cmd_data(&value);
-	msg_maxim(" pd_msg [%x]", pd_msg);
+	msg_maxim_dbg(" pd_msg [%x]", pd_msg);
 
 	switch (pd_msg) {
 	case Nothing_happened:
@@ -1259,10 +1271,10 @@ static irqreturn_t max77705_pdmsg_irq(int irq, void *data)
 
 	max77705_read_reg(usbc_data->muic, REG_PD_STATUS0, &pd_data->pd_status0);
 	pdmsg = pd_data->pd_status0;
-	msg_maxim("IRQ(%d)_IN pdmsg: %02x", irq, pdmsg);
+	msg_maxim_dbg("IRQ(%d)_IN pdmsg: %02x", irq, pdmsg);
 	max77705_pd_check_pdmsg(usbc_data, pdmsg);
 	pd_data->pdsmg = pdmsg;
-	msg_maxim("IRQ(%d)_OUT", irq);
+	msg_maxim_dbg("IRQ(%d)_OUT", irq);
 
 	return IRQ_HANDLED;
 }
@@ -1275,7 +1287,7 @@ static irqreturn_t max77705_psrdy_irq(int irq, void *data)
 	enum typec_pwr_opmode mode = TYPEC_PWR_MODE_USB;
 #endif
 
-	msg_maxim("IN");
+	msg_maxim_dbg("IN");
 	max77705_read_reg(usbc_data->muic, REG_PD_STATUS1, &usbc_data->pd_status1);
 	psrdy_received = (usbc_data->pd_status1 & BIT_PD_PSRDY)
 			>> FFS(BIT_PD_PSRDY);
@@ -1294,7 +1306,7 @@ static irqreturn_t max77705_psrdy_irq(int irq, void *data)
 	}
 #endif
 
-	msg_maxim("psrdy_received=%d, usbc_data->pd_support=%d, cc_status=%d",
+	msg_maxim_dbg("psrdy_received=%d, usbc_data->pd_support=%d, cc_status=%d",
 		psrdy_received, usbc_data->pd_support, usbc_data->pd_data->cc_status);
 
 #if defined(CONFIG_TYPEC)
@@ -1316,7 +1328,7 @@ static irqreturn_t max77705_psrdy_irq(int irq, void *data)
 	dwc3_set_selfpowered(psrdy_received);
 #endif
 
-	msg_maxim("OUT");
+	msg_maxim_dbg("OUT");
 	return IRQ_HANDLED;
 }
 
