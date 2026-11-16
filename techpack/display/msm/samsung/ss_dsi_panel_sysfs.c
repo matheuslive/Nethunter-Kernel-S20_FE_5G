@@ -1298,7 +1298,7 @@ static ssize_t ss_lux_show(struct device *dev,
 
 	rc = snprintf((char *)buf, 40, "%d\n", vdd->br_info.lux);
 
-	LCD_INFO("lux : %d\n", vdd->br_info.lux);
+	LCD_DEBUG("lux : %d\n", vdd->br_info.lux);
 
 	return rc;
 }

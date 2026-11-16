@@ -335,7 +335,8 @@ static void __ref ts_print(struct work_struct *work)
 
 	pr_info("%s\n", buffer);
 
-	schedule_delayed_work(&ts_print_work, HZ * 5);
+	/* 5 s era ~12 linhas/min de kmsg; 60 s ainda deixa historico no last_kmsg */
+	schedule_delayed_work(&ts_print_work, HZ * 60);
 }
 #endif
 

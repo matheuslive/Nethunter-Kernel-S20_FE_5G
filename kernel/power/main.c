@@ -802,7 +802,9 @@ int set_freq_limit(unsigned long id, unsigned int freq)
 	struct cpufreq_limit_handle *handle =
 							cpufreq_limit_get_handle(id);
 
-	pr_debug("%s: id(%d) freq(%d)\n", __func__, (int)id, freq);
+	/* pr_debug imprime aqui: o Makefile poe -DDEBUG com CONFIG_PM_DEBUG.
+	 * ~130 linhas/min de kmsg (cada boost de toque/app): fica mudo. */
+	no_printk(KERN_DEBUG "%s: id(%d) freq(%d)\n", __func__, (int)id, freq);
 
 	mutex_lock(&cpufreq_limit_mutex);
 

@@ -1596,6 +1596,7 @@ static inline int thermal_generate_netlink_event(struct thermal_zone_device *tz,
 
 #if defined(CONFIG_SEC_PM)
 #define BUF_SIZE	SZ_1K
+static char cdev_print_last[BUF_SIZE];
 static void __ref cdev_print(struct work_struct *work)
 {
 	struct thermal_cooling_device *cdev;
@@ -1619,7 +1620,12 @@ static void __ref cdev_print(struct work_struct *work)
 	}
 	mutex_unlock(&thermal_list_lock);
 
-	pr_info("thermal: cdev%s\n", buffer);
+	/* So quando ha cooling device ativo e o conjunto mudou: a linha vazia a
+	 * cada 5 s era ~12 linhas/min de kmsg. */
+	if (strcmp(buffer, cdev_print_last)) {
+		pr_info("thermal: cdev%s\n", buffer);	/* vazia = fim do throttling */
+		strlcpy(cdev_print_last, buffer, sizeof(cdev_print_last));
+	}
 
 	schedule_delayed_work(&cdev_print_work, HZ * 5);
 }

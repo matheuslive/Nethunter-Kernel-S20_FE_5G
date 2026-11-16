@@ -5594,7 +5594,7 @@ void ufshcd_tw_ctrl(struct scsi_device *sdev, int en)
 	mutex_lock(&hba->tw_ctrl_mutex);
 	has_lock = true;
 
-	pr_err("UFS: try TW %s.\n", en ? "On" : "Off");
+	pr_debug("UFS: try TW %s.\n", en ? "On" : "Off");
 
 	if (!hba->support_tw)
 		goto out;
@@ -5642,7 +5642,7 @@ void ufshcd_tw_ctrl(struct scsi_device *sdev, int en)
 					__func__, err);
 		} else {
 			ufshcd_set_tw_on(hba);
-			dev_info(hba->dev, "%s: ufs turbo write enabled \n", __func__);
+			dev_dbg(hba->dev, "%s: ufs turbo write enabled \n", __func__);
 		}
 	} else {
 		if (ufshcd_is_tw_off(hba)) {
@@ -5665,7 +5665,7 @@ void ufshcd_tw_ctrl(struct scsi_device *sdev, int en)
 					__func__, err);
 		} else {
 			ufshcd_set_tw_off(hba);
-			dev_info(hba->dev, "%s: ufs turbo write disabled \n", __func__);
+			dev_dbg(hba->dev, "%s: ufs turbo write disabled \n", __func__);
 		}
 	}
 	SEC_ufs_update_tw_info(hba, 0);

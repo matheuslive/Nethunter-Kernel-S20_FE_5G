@@ -1,0 +1,19 @@
+setuid_hook: handle_setresuid em pr_debug (spam do kmsg)
+
+Um print por setresuid() do zygote a cada app lancado: ~34 linhas/min de
+kmsg no S20 (medido no v4.15, 2026-11-16). Vira pr_debug, que sem DEBUG
+nao compila. Nao toca uapi nem a versao: o driver continua 33294.
+---
+diff --git a/kernel/hook/setuid_hook.c b/kernel/hook/setuid_hook.c
+index 3184deb2..d0d498c1 100644
+--- a/kernel/hook/setuid_hook.c
++++ b/kernel/hook/setuid_hook.c
+@@ -28,7 +28,7 @@ int ksu_handle_setresuid(uid_t old_uid, uid_t new_uid)
+ {
+     // we rely on the fact that zygote always call setresuid(3) with same uids
+ 
+-    pr_info("handle_setresuid from %d to %d\n", old_uid, new_uid);
++    pr_debug("handle_setresuid from %d to %d\n", old_uid, new_uid);
+ 
+     if (unlikely(is_uid_manager(new_uid))) {
+ 

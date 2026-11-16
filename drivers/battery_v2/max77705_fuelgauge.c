@@ -200,7 +200,7 @@ static int max77705_fg_read_vcell(struct max77705_fuelgauge_data *fuelgauge)
 
 	if (!(fuelgauge->info.pr_cnt++ % PRINT_COUNT)) {
 		fuelgauge->info.pr_cnt = 1;
-		pr_info("%s: VCELL(%d)mV, data(0x%04x)\n",
+		pr_debug("%s: VCELL(%d)mV, data(0x%04x)\n",
 			__func__, vcell, (data[1] << 8) | data[0]);
 	}
 
@@ -2258,7 +2258,7 @@ static int max77705_fg_get_property(struct power_supply *psy,
 				for (j = 0; j < 10; j++) {
 					msleep(175);
 					ocv_data[j] = max77705_get_fuelgauge_value(fuelgauge, FG_VOLTAGE);
-					pr_info("%s: ocv_data[%d]: %d\n", __func__, j, ocv_data[j]);
+					pr_debug("%s: ocv_data[%d]: %d\n", __func__, j, ocv_data[j]);
 				}
 
 				value.intval = 1;

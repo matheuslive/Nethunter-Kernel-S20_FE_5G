@@ -2215,7 +2215,8 @@ error:
 		pca9468->health_status = POWER_SUPPLY_HEALTH_DC_ERR;
 	}
 #endif
-	pr_info("%s: Active Status=%d\n", __func__, ret);
+	if (ret)	/* so o erro: o Active Status=0 saia a cada tick (~9/min) */
+		pr_info("%s: Active Status=%d\n", __func__, ret);
 	return ret;
 }
 
@@ -3654,10 +3655,10 @@ static void pca9468_timer_work(struct work_struct *work)
 #ifdef CONFIG_RTC_HCTOSYS
 	get_current_time(&pca9468->last_update_time);
 
-	pr_info("%s: timer id=%d, charging_state=%d, last_update_time=%lu\n",
+	pr_debug("%s: timer id=%d, charging_state=%d, last_update_time=%lu\n",
 		__func__, pca9468->timer_id, pca9468->charging_state, pca9468->last_update_time);
 #else
-	pr_info("%s: timer id=%d, charging_state=%d\n",
+	pr_debug("%s: timer id=%d, charging_state=%d\n",
 		__func__, pca9468->timer_id, pca9468->charging_state);
 #endif
 

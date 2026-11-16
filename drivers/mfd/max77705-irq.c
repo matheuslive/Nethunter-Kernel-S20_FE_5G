@@ -230,7 +230,7 @@ static irqreturn_t max77705_irq_thread(int irq, void *data)
 		return IRQ_NONE;
 	}
 
-	pr_info("%s:%s: irq[%d] %d/%d/%d irq_src=0x%02x pmic_rev=0x%02x\n", MFD_DEV_NAME, __func__,
+	pr_debug("%s:%s: irq[%d] %d/%d/%d irq_src=0x%02x pmic_rev=0x%02x\n", MFD_DEV_NAME, __func__,
 		irq, max77705->irq, max77705->irq_base, max77705->irq_gpio, irq_src, pmic_rev);
 
 	if (irq_src & MAX77705_IRQSRC_CHG) {
@@ -358,9 +358,9 @@ static irqreturn_t max77705_irq_thread(int irq, void *data)
 		}
 		ret = max77705_bulk_read(max77705->muic, MAX77705_USBC_REG_USBC_STATUS1,
 				8, dump_reg);
-		pr_info("[MAX77705] irq_reg, complete [%x], %x, %x, %x, %x, %x\n", max77705->cc_booting_complete,
+		pr_debug("[MAX77705] irq_reg, complete [%x], %x, %x, %x, %x, %x\n", max77705->cc_booting_complete,
 			irq_reg[USBC_INT], irq_reg[CC_INT], irq_reg[PD_INT], irq_reg[VDM_INT], irq_vdm_mask);
-		pr_info("[MAX77705] dump_reg, %x, %x, %x, %x, %x, %x, %x, %x\n", dump_reg[0], dump_reg[1],
+		pr_debug("[MAX77705] dump_reg, %x, %x, %x, %x, %x, %x, %x, %x\n", dump_reg[0], dump_reg[1],
 			dump_reg[2], dump_reg[3], dump_reg[4], dump_reg[5], dump_reg[6], dump_reg[7]);
 	}
 
@@ -369,7 +369,7 @@ static irqreturn_t max77705_irq_thread(int irq, void *data)
 		ic_alt_mode = (cc_status1 & BIT_Altmode) >> FFS(BIT_Altmode);
 		if (!ic_alt_mode && max77705->set_altmode)
 			irq_reg[VIR_INT] |= (1 << 0);
-		pr_info("%s ic_alt_mode=%d\n", __func__, ic_alt_mode);
+		pr_debug("%s ic_alt_mode=%d\n", __func__, ic_alt_mode);
 
 		if (irq_reg[PD_INT] & BIT_PDMsg) {
 			if (dump_reg[6] == Sink_PD_PSRdy_received
@@ -405,7 +405,7 @@ static irqreturn_t max77705_irq_thread(int irq, void *data)
 	max77705->is_usbc_queue = !check_usbc_opcode_queue();
 #endif
 
-	pr_info("%s doing_irq = %d, is_usbc_queue=%d\n", __func__,
+	pr_debug("%s doing_irq = %d, is_usbc_queue=%d\n", __func__,
 				max77705->doing_irq, max77705->is_usbc_queue);
 
 	wake_up_interruptible(&max77705->queue_empty_wait_q);

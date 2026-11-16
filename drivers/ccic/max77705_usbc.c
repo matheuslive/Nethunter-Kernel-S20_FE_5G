@@ -1880,7 +1880,7 @@ bool is_empty_usbc_cmd_queue(usbc_cmd_queue_t *usbc_cmd_queue)
 		ret = true;
 
 	if (ret)
-		msg_maxim("usbc_cmd_queue Empty(%c)", ret ? 'T' : 'F');
+		msg_maxim_dbg("usbc_cmd_queue Empty(%c)", ret ? 'T' : 'F');
 
 	return ret;
 }
@@ -1916,17 +1916,17 @@ static void dequeue_usbc_cmd
 	usbc_cmd_node *temp_node;
 
 	if (is_empty_usbc_cmd_queue(usbc_cmd_queue)) {
-		msg_maxim("Queue, Empty!");
+		msg_maxim_dbg("Queue, Empty!");
 		return;
 	}
 
 	temp_node = usbc_cmd_queue->front;
 	copy_usbc_cmd_data(&(temp_node->cmd_data), cmd_data);
 
-	msg_maxim("Opcode(0x%02x) Response(0x%02x)", cmd_data->opcode, cmd_data->response);
+	msg_maxim_dbg("Opcode(0x%02x) Response(0x%02x)", cmd_data->opcode, cmd_data->response);
 
 	if (usbc_cmd_queue->front->next == NULL) {
-		msg_maxim("front->next = NULL");
+		msg_maxim_dbg("front->next = NULL");
 		usbc_cmd_queue->front = NULL;
 	} else
 		usbc_cmd_queue->front = usbc_cmd_queue->front->next;
@@ -1941,12 +1941,12 @@ static bool front_usbc_cmd
 	(usbc_cmd_queue_t *cmd_queue, usbc_cmd_data *cmd_data)
 {
 	if (is_empty_usbc_cmd_queue(cmd_queue)) {
-		msg_maxim("Queue, Empty!");
+		msg_maxim_dbg("Queue, Empty!");
 		return false;
 	}
 
 	copy_usbc_cmd_data(&(cmd_queue->front->cmd_data), cmd_data);
-	msg_maxim("Opcode(0x%02x)", cmd_data->opcode);
+	msg_maxim_dbg("Opcode(0x%02x)", cmd_data->opcode);
 	return true;
 }
 
@@ -2006,9 +2006,9 @@ int max77705_i2c_opcode_write(struct max77705_usbc_platform_data *usbc_data,
 	for (i = 0; i < length + OPCODE_SIZE; i++)
 		msg_maxim("[%d], 0x[%x]", i, write_values[i]);
 #else
-	msg_maxim("opcode 0x%x, write_length %d",
+	msg_maxim_dbg("opcode 0x%x, write_length %d",
 			opcode, length + OPCODE_SIZE);
-	print_hex_dump(KERN_INFO, "max77705: opcode_write: ",
+	print_hex_dump_debug("max77705: opcode_write: ",
 			DUMP_PREFIX_OFFSET, 16, 1, write_values,
 			length + OPCODE_SIZE, false);
 #endif
@@ -2060,9 +2060,9 @@ int max77705_i2c_opcode_read(struct max77705_usbc_platform_data *usbc_data,
 	for (i = 0; i < length + OPCODE_SIZE; i++)
 		msg_maxim("[%d], 0x[%x]", i, values[i]);
 #else
-	msg_maxim("opcode 0x%x, read_length %d, ret_error %d",
+	msg_maxim_dbg("opcode 0x%x, read_length %d, ret_error %d",
 			opcode, length + OPCODE_SIZE, size);
-	print_hex_dump(KERN_INFO, "max77705: opcode_read: ",
+	print_hex_dump_debug("max77705: opcode_read: ",
 			DUMP_PREFIX_OFFSET, 16, 1, values,
 			length + OPCODE_SIZE, false);
 #endif
@@ -2375,7 +2375,7 @@ void max77705_usbc_dequeue_queue(struct max77705_usbc_platform_data *usbc_data)
 	init_usbc_cmd_data(&cmd_data);
 
 	if (is_empty_usbc_cmd_queue(cmd_queue)) {
-		msg_maxim("Queue, Empty");
+		msg_maxim_dbg("Queue, Empty");
 		return;
 	}
 
@@ -2445,7 +2445,7 @@ static void max77705_usbc_cmd_run(struct max77705_usbc_platform_data *usbc_data)
 	init_usbc_cmd_data(&cmd_data);
 
 	if (is_empty_usbc_cmd_queue(cmd_queue)) {
-		msg_maxim("Queue, Empty");
+		msg_maxim_dbg("Queue, Empty");
 		kfree(run_node);
 		return;
 	}
@@ -2456,12 +2456,12 @@ static void max77705_usbc_cmd_run(struct max77705_usbc_platform_data *usbc_data)
 		max77705_notify_execute(usbc_data, &cmd_data);
 		max77705_usbc_cmd_run(usbc_data);
 	} else if (cmd_data.opcode == OPCODE_NONE) {/* Apcmdres isr */
-		msg_maxim("Apcmdres ISR !!!");
+		msg_maxim_dbg("Apcmdres ISR !!!");
 		max77705_irq_execute(usbc_data, &cmd_data);
 		usbc_data->opcode_stamp = 0;
 		max77705_usbc_cmd_run(usbc_data);
 	} else { /* No ISR */
-		msg_maxim("No ISR");
+		msg_maxim_dbg("No ISR");
 		copy_usbc_cmd_data(&cmd_data, &(usbc_data->last_opcode));
 		ret = max77705_i2c_opcode_write(usbc_data, cmd_data.opcode,
 				cmd_data.write_length, cmd_data.write_data);
@@ -3107,10 +3107,10 @@ static irqreturn_t max77705_apcmd_irq(int irq, void *data)
 	struct max77705_usbc_platform_data *usbc_data = data;
 	u8 sysmsg = 0;
 
-	msg_maxim("IRQ(%d)_IN", irq);
+	msg_maxim_dbg("IRQ(%d)_IN", irq);
 	max77705_read_reg(usbc_data->muic, REG_USBC_STATUS2, &usbc_data->usbc_status2);
 	sysmsg = usbc_data->usbc_status2;
-	msg_maxim(" [IN] sysmsg : %d", sysmsg);
+	msg_maxim_dbg(" [IN] sysmsg : %d", sysmsg);
 
 	mutex_lock(&usbc_data->op_lock);
 	max77705_usbc_cmd_run(usbc_data);
@@ -3122,7 +3122,7 @@ static irqreturn_t max77705_apcmd_irq(int irq, void *data)
 		usbc_data->need_recover = false;
 	}
 
-	msg_maxim("IRQ(%d)_OUT", irq);
+	msg_maxim_dbg("IRQ(%d)_OUT", irq);
 
 	return IRQ_HANDLED;
 }
