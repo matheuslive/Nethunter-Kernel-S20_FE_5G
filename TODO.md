@@ -85,6 +85,9 @@ nomount.ko se recompilam juntos.
 ### `#20` Validar a v4.14 (allowlist do KernelSU-Next persistindo)
 *validação* — (2026-11-03) — kernel e companion v4.14 prontos em `build/r8q/` (não gravados). Fix: o `.allowlist` é gravado com os keyrings do init (patch `patches/kernelsu-next/0002-*`). Depois do flash (coordenado pela sessão do S20FE_re): `ksud profile set` → dmesg com `save allow list, name: … allow: 1` (e nada de `-126`), `/data/adb/ksu/.allowlist` > 0 bytes, grants persistem num reboot sem o `ksugrants`; nomount.ko da v4.14 em `build/r8q/v4.14/nomount/`. Roteiro em [docs/kernelsu.md](docs/kernelsu.md#v414-fix-da-persistência-do-allowlist)
 
+### `#23` Validar a v4.18 (kmsg, quarta onda) carregando e com a câmera
+*validação* — Com o aparelho descarregando e sem abrir a câmera, as fontes da quarta onda deram 0 linha/min ([finding](docs/findings/2026-11-16-kmsg-v4.18.md)). Falta capturar (1) **carregando por USB-PD**, `battery/status` = `Charging`, contra 1378/min na v4.17, com projeção de ~470/min; e (2) com a **câmera aberta e fechada algumas vezes**. Medir com `~/Android/S20FE_re/scripts/kmsg-top.py` e `tools/kmsg-onda4-proj.py`. Candidatos de uma quinta onda: `fts` `ttype(N->P)` (484/min em uso), `IB is null on release` (96/min) e suspend/resume do cnss/WLAN (~330/min) (adicionado 2026-11-16)
+
 ## Roadmap
 
 ### `#19` SUSFS no KernelSU-Next
