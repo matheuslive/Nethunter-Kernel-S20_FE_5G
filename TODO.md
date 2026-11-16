@@ -85,9 +85,6 @@ nomount.ko se recompilam juntos.
 ### `#20` Validar a v4.14 (allowlist do KernelSU-Next persistindo)
 *validação* — (2026-11-03) — kernel e companion v4.14 prontos em `build/r8q/` (não gravados). Fix: o `.allowlist` é gravado com os keyrings do init (patch `patches/kernelsu-next/0002-*`). Depois do flash (coordenado pela sessão do S20FE_re): `ksud profile set` → dmesg com `save allow list, name: … allow: 1` (e nada de `-126`), `/data/adb/ksu/.allowlist` > 0 bytes, grants persistem num reboot sem o `ksugrants`; nomount.ko da v4.14 em `build/r8q/v4.14/nomount/`. Roteiro em [docs/kernelsu.md](docs/kernelsu.md#v414-fix-da-persistência-do-allowlist)
 
-### `#23` Validar a v4.17 (zram lz4/zstd, zswap, kmsg terceira onda) no aparelho
-*validação* — gravar só com o OK do usuário (`tools/flash-booted.sh build/r8q/NetHunter_matheuslive_r8q_v4.17.zip --write`, pela mãe). Conferir: `uname -r` v4.17, KernelSU/nomount vivos (`.ko` da v4.15 servem, 0 CRCs mudados), `comp_algorithm` listando `lz4 lz4hc zstd` com `[lzo-rle]`, `/sys/module/zswap/parameters/enabled` = N, e o antes × depois do kmsg com o `scripts/kmsg-top.py` do S20FE_re (v4.15: 1439 linhas/min; projeção ~750). Rollback: `/sdcard/ZIP/boot-nethunter-v4.15-ksunext-stockramdisk-20261104.img` (md5 `a011ecda…`, = `build/r8q/boot-v4.15-2026-11-06.img`) (adicionado 2026-11-16)
-
 ## Roadmap
 
 ### `#19` SUSFS no KernelSU-Next
