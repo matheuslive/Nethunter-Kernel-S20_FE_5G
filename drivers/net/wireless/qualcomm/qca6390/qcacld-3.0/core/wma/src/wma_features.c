@@ -1595,8 +1595,8 @@ static void wma_inc_wow_stats(t_wma_handle *wma,
 
 static void wma_wow_stats_display(struct wake_lock_stats *stats)
 {
-	WMA_LOGA("WLAN wake reason counters:");
-	WMA_LOGA("uc:%d bc:%d v4_mc:%d v6_mc:%d ra:%d ns:%d na:%d "
+	WMA_LOGD("WLAN wake reason counters:");
+	WMA_LOGD("uc:%d bc:%d v4_mc:%d v6_mc:%d ra:%d ns:%d na:%d "
 		 "icmp:%d icmpv6:%d",
 		 stats->ucast_wake_up_count,
 		 stats->bcast_wake_up_count,
@@ -1608,7 +1608,7 @@ static void wma_wow_stats_display(struct wake_lock_stats *stats)
 		 stats->icmpv4_count,
 		 stats->icmpv6_count);
 
-	WMA_LOGA("assoc:%d disassoc:%d assoc_resp:%d reassoc:%d "
+	WMA_LOGD("assoc:%d disassoc:%d assoc_resp:%d reassoc:%d "
 		 "reassoc_resp:%d auth:%d deauth:%d action:%d",
 		 stats->mgmt_assoc,
 		 stats->mgmt_disassoc,
@@ -1619,7 +1619,7 @@ static void wma_wow_stats_display(struct wake_lock_stats *stats)
 		 stats->mgmt_deauth,
 		 stats->mgmt_action);
 
-	WMA_LOGA("pno_match:%d pno_complete:%d gscan:%d "
+	WMA_LOGD("pno_match:%d pno_complete:%d gscan:%d "
 		 "low_rssi:%d rssi_breach:%d oem:%d scan_11d:%d",
 		 stats->pno_match_wake_up_count,
 		 stats->pno_complete_wake_up_count,
@@ -2168,7 +2168,7 @@ static void wma_wow_parse_data_pkt(t_wma_handle *wma,
 
 	src_mac = data + QDF_NBUF_SRC_MAC_OFFSET;
 	dest_mac = data + QDF_NBUF_DEST_MAC_OFFSET;
-	wma_info("Src_mac: " QDF_MAC_ADDR_FMT ", Dst_mac: " QDF_MAC_ADDR_FMT,
+	wma_debug("Src_mac: " QDF_MAC_ADDR_FMT ", Dst_mac: " QDF_MAC_ADDR_FMT,
 		 QDF_MAC_ADDR_REF(src_mac), QDF_MAC_ADDR_REF(dest_mac));
 
 	wma_wow_inc_wake_lock_stats_by_dst_addr(wma, vdev_id, dest_mac);

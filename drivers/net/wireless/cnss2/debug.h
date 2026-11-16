@@ -42,8 +42,11 @@ extern void *cnss_ipc_log_long_context;
 		cnss_ipc_log_string("%scnss: " _fmt, "", ##__VA_ARGS__);\
 	} while (0)
 
+/* kmsg (v4.19): o vdbg e a rotina de cada runtime suspend/resume do PCIe
+ * (~150 linhas/min); vai so para o ipc_log do cnss, nao para o kmsg.
+ */
 #define cnss_pr_vdbg(_fmt, ...) do {					\
-		printk("%scnss: " _fmt, KERN_DEBUG, ##__VA_ARGS__);	\
+		no_printk("%scnss: " _fmt, KERN_DEBUG, ##__VA_ARGS__);	\
 		cnss_ipc_log_long_string("%scnss: " _fmt, "",		\
 					 ##__VA_ARGS__);		\
 	} while (0)

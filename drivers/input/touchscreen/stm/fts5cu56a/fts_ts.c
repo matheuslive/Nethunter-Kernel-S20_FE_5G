@@ -2031,7 +2031,7 @@ static u8 fts_event_handler_type_b(struct fts_ts_info *info)
 
 
 				if (info->finger[TouchID].ttype != info->finger[TouchID].prev_ttype) {
-					input_info(true, &info->client->dev, "%s: tID:%d ttype(%c->%c) : %s\n",
+					input_dbg(true, &info->client->dev, "%s: tID:%d ttype(%c->%c) : %s\n",
 							__func__, info->finger[TouchID].id,
 							finger_mode[info->finger[TouchID].prev_ttype],
 							finger_mode[info->finger[TouchID].ttype],

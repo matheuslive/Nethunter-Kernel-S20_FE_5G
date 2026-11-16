@@ -2685,7 +2685,11 @@ static int cnss_pci_runtime_suspend(struct device *dev)
 	if (ret)
 		pci_priv->drv_connected_last = 0;
 
-	cnss_pr_vdbg("Runtime suspend status: %d\n", ret);
+	/* kmsg (v4.19): o status com erro continua no kmsg */
+	if (ret)
+		cnss_pr_dbg("Runtime suspend status: %d\n", ret);
+	else
+		cnss_pr_vdbg("Runtime suspend status: %d\n", ret);
 
 	return ret;
 }
@@ -2720,7 +2724,11 @@ static int cnss_pci_runtime_resume(struct device *dev)
 	if (!ret)
 		pci_priv->drv_connected_last = 0;
 
-	cnss_pr_vdbg("Runtime resume status: %d\n", ret);
+	/* kmsg (v4.19): o status com erro continua no kmsg */
+	if (ret)
+		cnss_pr_dbg("Runtime resume status: %d\n", ret);
+	else
+		cnss_pr_vdbg("Runtime resume status: %d\n", ret);
 
 	return ret;
 }

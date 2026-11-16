@@ -1245,7 +1245,7 @@ hdd_suspend_wlan(void)
 	struct hdd_adapter *adapter = NULL;
 	uint32_t conn_state_mask = 0;
 
-	hdd_info("WLAN being suspended by OS");
+	hdd_debug("WLAN being suspended by OS");
 
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	if (!hdd_ctx) {
@@ -1303,7 +1303,7 @@ static int hdd_resume_wlan(void)
 	struct hdd_adapter *adapter;
 	QDF_STATUS status;
 
-	hdd_info("WLAN being resumed by OS");
+	hdd_debug("WLAN being resumed by OS");
 
 	hdd_ctx = cds_get_context(QDF_MODULE_ID_HDD);
 	if (!hdd_ctx) {

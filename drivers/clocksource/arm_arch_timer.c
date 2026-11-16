@@ -894,9 +894,12 @@ static void arch_counter_set_user_access(void)
 	 * disabled though.
 	 */
 	if (arch_timer_this_cpu_has_cntvct_wa() ||
-	    !IS_ENABLED(CONFIG_ARM_ARCH_TIMER_VCT_ACCESS))
-		pr_info("CPU%d: Trapping CNTVCT access\n", smp_processor_id());
-	else
+	    !IS_ENABLED(CONFIG_ARM_ARCH_TIMER_VCT_ACCESS)) {
+		/* kmsg (v4.19): fora do boot, e o hotplug de cada suspend */
+		if (system_state < SYSTEM_RUNNING)
+			pr_info("CPU%d: Trapping CNTVCT access\n",
+				smp_processor_id());
+	} else
 		cntkctl |= ARCH_TIMER_USR_VCT_ACCESS_EN;
 
 	arch_timer_set_cntkctl(cntkctl);

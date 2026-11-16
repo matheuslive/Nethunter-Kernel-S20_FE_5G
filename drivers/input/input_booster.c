@@ -119,7 +119,7 @@ void trigger_input_booster(struct work_struct* work)
 		ib = find_release_ib(p_IbTrigger->dev_type, p_IbTrigger->key_id);
 
 		if (ib == NULL) {
-			pr_err("IB is null on release");
+			pr_debug("IB is null on release");
 			mutex_unlock(&trigger_ib_lock);
 			return;
 		}

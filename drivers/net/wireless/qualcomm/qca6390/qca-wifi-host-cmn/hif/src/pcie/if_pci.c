@@ -1353,7 +1353,7 @@ int hif_pm_runtime_sync_resume(struct hif_opaque_softc *hif_ctx)
 	pm_state = qdf_atomic_read(&sc->pm_state);
 	if (pm_state == HIF_PM_RUNTIME_STATE_SUSPENDED ||
 	    pm_state == HIF_PM_RUNTIME_STATE_SUSPENDING)
-		HIF_INFO("Runtime PM resume is requested by %ps",
+		hif_debug("Runtime PM resume is requested by %ps",
 			 (void *)_RET_IP_);
 
 	sc->pm_stats.request_resume++;
@@ -4255,7 +4255,7 @@ int hif_pm_runtime_get_sync(struct hif_opaque_softc *hif_ctx,
 	pm_state = qdf_atomic_read(&sc->pm_state);
 	if (pm_state == HIF_PM_RUNTIME_STATE_SUSPENDED ||
 	    pm_state == HIF_PM_RUNTIME_STATE_SUSPENDING)
-		hif_info_high("Runtime PM resume is requested by %ps",
+		hif_debug("Runtime PM resume is requested by %ps",
 			      (void *)_RET_IP_);
 
 	hif_pm_stats_runtime_get_record(sc, rtpm_dbgid);
@@ -4332,7 +4332,7 @@ int hif_pm_runtime_request_resume(struct hif_opaque_softc *hif_ctx)
 	pm_state = qdf_atomic_read(&sc->pm_state);
 	if (pm_state == HIF_PM_RUNTIME_STATE_SUSPENDED ||
 	    pm_state == HIF_PM_RUNTIME_STATE_SUSPENDING)
-		HIF_INFO("Runtime PM resume is requested by %ps",
+		hif_debug("Runtime PM resume is requested by %ps",
 			 (void *)_RET_IP_);
 
 	sc->pm_stats.request_resume++;
@@ -4427,7 +4427,7 @@ int hif_pm_runtime_get(struct hif_opaque_softc *hif_ctx,
 
 	if (pm_state == HIF_PM_RUNTIME_STATE_SUSPENDED ||
 	    pm_state == HIF_PM_RUNTIME_STATE_SUSPENDING) {
-		hif_info_high("Runtime PM resume is requested by %ps",
+		hif_debug("Runtime PM resume is requested by %ps",
 			      (void *)_RET_IP_);
 		ret = -EAGAIN;
 	} else {
