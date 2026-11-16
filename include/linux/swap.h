@@ -250,10 +250,6 @@ struct swap_info_struct {
 	struct block_device *bdev;	/* swap device or bdev of swap file */
 	struct file *swap_file;		/* seldom referenced */
 	unsigned int old_block_size;	/* seldom referenced */
-#ifdef CONFIG_FRONTSWAP
-	unsigned long *frontswap_map;	/* frontswap in-use, one bit per page */
-	atomic_t frontswap_pages;	/* frontswap pages in-use counter */
-#endif
 	spinlock_t lock;		/*
 					 * protect map scan related fields like
 					 * swap_map, lowest_bit, highest_bit,
@@ -275,6 +271,17 @@ struct swap_info_struct {
 	struct swap_cluster_list discard_clusters; /* discard clusters list */
 	unsigned int write_pending;
 	unsigned int max_writes;
+#if defined(CONFIG_FRONTSWAP) && !defined(__GENKSYMS__)
+	/*
+	 * NetHunter r8q v4.17: no fim (antes do avail_lists) e fora do genksyms,
+	 * para ligar o FRONTSWAP/zswap sem mudar o layout dos campos acima nem
+	 * os CRCs do MODVERSIONS (sem isto, 954 simbolos mudavam e os .ko da
+	 * v4.15, nomount inclusive, deixavam de carregar). So o kernel aloca e
+	 * le esta struct (alloc_swap_info), nenhum modulo.
+	 */
+	unsigned long *frontswap_map;	/* frontswap in-use, one bit per page */
+	atomic_t frontswap_pages;	/* frontswap pages in-use counter */
+#endif
 	struct plist_node avail_lists[0]; /*
 					   * entries in swap_avail_heads, one
 					   * entry per node.
