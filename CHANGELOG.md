@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-16
+
+- **15:20 Alterado:** kmsg: terceira onda. Spam de rotina rebaixado para debug, com os erros mantidos: fila de comandos e IRQs do max77705 (USB-C/PDIC), `set_freq_limit`, toques `[P]/[R]` do fts (seguem no buffer do `sec_tsp_log`), `input_booster`, `handle_setresuid` do KernelSU (patch `0004`), Turbo Write do UFS, `ss_lux_show`, `prevnet_l1` do PCIe, VCELL/OCV do fuel gauge e `pca9468`; `tsens` a cada 60 s e `thermal: cdev` só quando muda. Medido no v4.15: 1439 linhas/min; projeção de ~750/min, a medir depois do flash ([e6fa4c9](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/e6fa4c999))
+- **15:20 Implementado:** v4.17 com zram `lz4`/`lz4hc`/`zstd` e zswap (`FRONTSWAP`+`ZSWAP`+`ZBUD`), sem mudar o default do zram0 (`lzo-rle`) e com o zswap desligado no boot; os campos do frontswap ficam fora do genksyms, então 0 CRCs mudam contra a v4.15 e os `.ko` dela (nomount incluso) carregam; não gravado ([09e7978](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/09e7978ba), [docs/zram-zswap.md](docs/zram-zswap.md))
+
 ## 2026-11-06
 
 - **13:46 Corrigido:** causa do bootloop do v4.16 no header SHELVED de `init/bootstate_spoof.c` e em `docs/bootstate-spoof.md`: confirmada pelo `last_kmsg` (escrita in-place na prop `bootargs` do `/chosen`, que aponta para o FDT mapeado read-only no fixmap), não o RKP/KDP; nota de spoof correto via `of_update_property()`. Segue shelved, sem bump ([7b50456](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/7b50456dd), [docs/bootstate-spoof.md](docs/bootstate-spoof.md))
