@@ -38,6 +38,7 @@
 #include <linux/jiffies.h>
 #include <linux/vmstat.h>
 #include <linux/statfs.h>
+#include <linux/magic.h>
 #include <linux/swap.h>
 #include <linux/swapops.h>
 #include <linux/compat.h>
@@ -358,6 +359,17 @@ static int zram_pin_backing_file(struct zram *zram)
 	int __user *buf;
 	int set = F2FS_SET_PIN_FILE;
 	int ret;
+
+	/*
+	 * Pinning only keeps f2fs GC from moving the file's blocks; other
+	 * filesystems (ext4 on the SD card) don't move blocks behind the loop
+	 * and answer the f2fs ioctl with -ENOTTY, so skip it there.
+	 */
+	if (file_inode(file)->i_sb->s_magic != F2FS_SUPER_MAGIC) {
+		pr_info("%s backing file not on f2fs (magic 0x%lx), not pinned\n",
+			__func__, file_inode(file)->i_sb->s_magic);
+		return 0;
+	}
 
 	buf = compat_alloc_user_space(sizeof(*buf));
 	if (!buf) {
