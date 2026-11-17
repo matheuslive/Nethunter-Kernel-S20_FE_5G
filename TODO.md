@@ -88,6 +88,9 @@ nomount.ko se recompilam juntos.
 ### `#23` Validar a v4.18 (kmsg, quarta onda) carregando e com a câmera
 *validação* — Com o aparelho descarregando e sem abrir a câmera, as fontes da quarta onda deram 0 linha/min ([finding](docs/findings/2026-11-16-kmsg-v4.18.md)). Falta capturar (1) **carregando por USB-PD**, `battery/status` = `Charging`, contra 1378/min na v4.17, com projeção de ~470/min; e (2) com a **câmera aberta e fechada algumas vezes**. Medir com `~/Android/S20FE_re/scripts/kmsg-top.py` e `tools/kmsg-onda4-proj.py`. Candidatos de uma quinta onda: `fts` `ttype(N->P)` (484/min em uso), `IB is null on release` (96/min) e suspend/resume do cnss/WLAN (~330/min) (adicionado 2026-11-16)
 
+### `#24` Validar a v4.19 (kmsg, quinta onda) com toque e com suspend
+*validação* — Gravada e medida em 2026-11-16 ([finding](docs/findings/2026-11-16-kmsg-v4.19.md)): cnss e qcacld validados (0/min com WoW ativo); touch `ttype`/`IB is null` só com pouco toque e o hotplug **sem nenhum suspend** na janela. Falta uma captura com o aparelho parado e de tela apagada por tempo bastante para suspender (`Disabling non-boot CPUs` presente) e outra com uso de toque (mão sobre a tela). Medir com `tools/kmsg-onda5-proj.py` (adicionado 2026-11-16)
+
 ## Roadmap
 
 ### `#19` SUSFS no KernelSU-Next
