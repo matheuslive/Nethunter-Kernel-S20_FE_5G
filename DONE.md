@@ -1,5 +1,12 @@
 # DONE
 
+### `2026-11-16` Validar a v4.20: zram writeback com backing no SD ext4 (antigo #25)
+Validado pelo Mod às 23:31.
+- `zram1` ligado com writeback de 2048 MB em `/data/adb/sd/.memvirt/zram-wb.img` (`loop44`).
+- dmesg: `zram_pin_backing_file backing file not on f2fs (magic 0xef53), not pinned` + `setup backing device /dev/block/loop44`.
+- `memvirt zram-wb` gravou 752 páginas (`bd_stat`); a RAM do zram caiu de 22,8 para 21,3 MB.
+- Desligou limpo às 23:32:43: zram1 removido, loop solto e arquivo apagado.
+
 ### Build local funcional do kernel Nethunter (`4.19.113-Nethunter_WirusMOD_r8q_v4.1`): resolvidos deps do host (bison/flex/libelf-dev), submodules CAN, e o fix do `-Wunused-function` que o `gcc-wrapper.py` da QCOM tornava fatal
 2026-08-06 (commit cffff32f1)
 

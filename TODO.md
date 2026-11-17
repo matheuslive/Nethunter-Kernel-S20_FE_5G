@@ -91,9 +91,6 @@ nomount.ko se recompilam juntos.
 ### `#24` Validar a v4.19 (kmsg, quinta onda) com toque e com suspend
 *validação* — Gravada e medida em 2026-11-16 ([finding](docs/findings/2026-11-16-kmsg-v4.19.md)): cnss e qcacld validados (0/min com WoW ativo); touch `ttype`/`IB is null` só com pouco toque e o hotplug **sem nenhum suspend** na janela. Falta uma captura com o aparelho parado e de tela apagada por tempo bastante para suspender (`Disabling non-boot CPUs` presente) e outra com uso de toque (mão sobre a tela). Medir com `tools/kmsg-onda5-proj.py` (adicionado 2026-11-16)
 
-### `#25` Validar a v4.20 (zram writeback com backing no SD ext4)
-*validação* — Gravada em 2026-11-16 23:25. Teste com o app Mod: tela Memória virtual, disco = cartão, ligar a zram extra com writeback. Esperado: `daemon.log` do memvirt com "zramN ligado ... writeback ... em /data/adb/sd/...", dmesg com `not on f2fs ... not pinned` + `setup backing device /dev/block/loopN`, `memvirt zram-wb` gravando, e desligar limpo.
-
 ## Roadmap
 
 ### `#19` SUSFS no KernelSU-Next
