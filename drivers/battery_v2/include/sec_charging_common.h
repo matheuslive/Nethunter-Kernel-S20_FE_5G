@@ -1591,6 +1591,35 @@ static inline struct power_supply *get_power_supply_by_name(char *name)
 	ret;	\
 })
 
+/* Igual ao psy_do_property, mas sem pr_err quando a property falha: so para
+ * caminhos de leitura do sysfs em que a falha e esperada (property sem
+ * suporte no chip) e a linha de erro viraria spam a cada leitura. A psy
+ * ausente continua avisando.
+ */
+#define psy_do_property_quiet(name, function, property, value) \
+({	\
+	struct power_supply *psy;	\
+	int ret = 0;	\
+	psy = get_power_supply_by_name((name));	\
+	if (!psy) {	\
+		pr_err("%s: Fail to "#function" psy (%s)\n",	\
+			__func__, (name));	\
+		value.intval = 0;	\
+		ret = -ENOENT;	\
+	} else {	\
+		if (psy->desc->function##_property != NULL) { \
+			ret = psy->desc->function##_property(psy, \
+				(enum power_supply_property) (property), &(value)); \
+			if (ret < 0)	\
+				value.intval = 0;	\
+		} else {	\
+			ret = -ENOSYS;	\
+		}	\
+		power_supply_put(psy);		\
+	}					\
+	ret;	\
+})
+
 #ifndef CONFIG_OF
 #define adc_init(pdev, pdata, channel)	\
 	(((pdata)->adc_api)[((((pdata)->adc_type[(channel)]) <	\

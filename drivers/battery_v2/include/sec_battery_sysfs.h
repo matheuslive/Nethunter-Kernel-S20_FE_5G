@@ -40,6 +40,13 @@ int sec_bat_create_attrs(struct device *dev);
 	.store = sec_bat_store_attrs,					\
 }
 
+/* Atributo so de leitura (0444, sem store) */
+#define SEC_BATTERY_ATTR_RO(_name)					\
+{									\
+	.attr = {.name = #_name, .mode = 0444},	\
+	.show = sec_bat_show_attrs,					\
+}
+
 enum {
 	BATT_RESET_SOC = 0,
 	BATT_READ_RAW_SOC,
@@ -304,6 +311,8 @@ enum {
 	DC_STEP_CHG_COND_SOC,
 	DC_STEP_CHG_COND_IIN,
 	DC_STEP_CHG_INFO,
+	/* retrato do ADC do PCA9468 (v4.21), sec_dc_adc.h */
+	DC_ADC,
 #endif
 };
 

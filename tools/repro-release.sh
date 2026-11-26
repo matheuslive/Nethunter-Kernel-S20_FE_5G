@@ -5,7 +5,7 @@
 #
 # Uso:
 #   tools/repro-release.sh <versao> [clean]      ex.: tools/repro-release.sh v4.11 clean
-#   KDIR=<checkout> JOBS=<n> tools/repro-release.sh ...
+#   KDIR=<checkout> JOBS=<n> tools/repro-release.sh ...   (sem JOBS: pelo MemAvailable)
 #
 # - KDIR: checkout onde compilar (padrao: o checkout principal do repo). Tem de
 #   ser o MESMO caminho da release: com O= o kbuild grava caminhos absolutos
@@ -34,7 +34,9 @@ set -euo pipefail
 VER=${1:?uso: $0 <versao> [clean]}
 KDIR=${KDIR:-$(git -C "$(dirname "$(readlink -f "$0")")" worktree list --porcelain | awk 'NR==1{print $2}')}
 KDIR=$(readlink -f "$KDIR")
-JOBS=${JOBS:-4}
+# -j pelo MemAvailable (tools/jobs.sh, o mesmo do build.sh); JOBS do ambiente vence
+. "$(dirname "$(readlink -f "$0")")/jobs.sh"
+jobs_by_mem
 VARIANT=r8q
 ARCH=arm64
 VERSION=NetHunter_matheuslive_${VARIANT}_${VER}

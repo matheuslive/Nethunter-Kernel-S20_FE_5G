@@ -12,6 +12,7 @@
 #include "include/sec_battery.h"
 #include "include/sec_battery_sysfs.h"
 #include "include/sec_charging_common.h"
+#include "include/sec_dc_adc.h"
 
 #include <linux/sec_param.h>
 #include <linux/sec_debug.h>
@@ -280,6 +281,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(dc_step_chg_cond_soc),
 	SEC_BATTERY_ATTR(dc_step_chg_cond_iin),
 	SEC_BATTERY_ATTR(dc_step_chg_info),
+	SEC_BATTERY_ATTR_RO(dc_adc),
 #endif
 };
 
@@ -1355,8 +1357,12 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 				battery->wdt_kick_disable);
 		break;
 	case MODE:
+		/* Nenhum charger do r8q trata a MULTI_CHARGER_MODE: a falha e
+		 * certa e cai no "master". Quieto para nao imprimir 2 linhas a
+		 * cada leitura (esta e a do sec-direct-charger repassando).
+		 */
 		value.strval = NULL;
-		psy_do_property(battery->pdata->charger_name, get,
+		psy_do_property_quiet(battery->pdata->charger_name, get,
 			POWER_SUPPLY_EXT_PROP_MULTI_CHARGER_MODE, value);
 		i += scnprintf(buf + i, PAGE_SIZE - i, "%s\n",
 			(value.strval) ? value.strval : "master");
@@ -2036,6 +2042,22 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		/* a ordem do enum casa com a da enum sec_dc_step_attr */
 		i = sec_bat_dc_step_show(battery, (enum sec_dc_step_attr)(
 			DC_STEP_ATTR_VAL_IOUT + (offset - DC_STEP_CHG_VAL_IOUT)), buf);
+		break;
+	case DC_ADC:
+		/* Uma linha, ordem fixa (contrato com o app Mod, docs/battery-sysfs.md).
+		 * Nunca erro e nada no kmsg: sem direct charging, ADC 0 e active=0.
+		 */
+		{
+			struct sec_dc_adc adc;
+
+			pca9468_get_dc_adc(&adc);
+			i += scnprintf(buf + i, PAGE_SIZE - i,
+				"vin=%d iin=%d vbat=%d vout=%d ichg=%d dietemp=%d "
+				"ichg_set=%d iin_set=%d vfloat=%d active=%d\n",
+				adc.vin, adc.iin, adc.vbat, adc.vout, adc.ichg,
+				adc.dietemp, adc.ichg_set, adc.iin_set, adc.vfloat,
+				adc.active);
+		}
 		break;
 #endif
 	default:

@@ -28,6 +28,7 @@ sysfs, e é nele que este módulo trabalha.
 | `FLOAT_VOLTAGE`, correntes, corrente de corte, limites térmicos, `WPC_TEMP_*` | ❌ | ✅ |
 | `AGE_STEP` (exige **v4.5+**) | ❌ | ✅ |
 | `dc_step_chg_*`, carga rápida de 25 W, e `batt_siop_*` (v4.12+) | ❌ | ✅ |
+| `dc_adc`, retrato do ADC do direct charger (v4.21+) | ❌ | ✅ |
 
 ### SIOP e o `siop.sh` absorvido
 
@@ -128,6 +129,89 @@ valores de fábrica dela, recortados pela float). Nada persiste no reboot.
 
 A releitura ecoa exatamente o que foi gravado. Validado no aparelho em
 2026-11-01 com PPS de 25 W (o `Ichg` muda na checagem seguinte do driver).
+
+### ADC do direct charger: `dc_adc` (kernel v4.21+)
+
+Só leitura (`0444`, sem `store`). Uma linha, campos sempre nesta ordem
+(contrato com o app Mod; não muda sem combinar com ele):
+
+```
+vin=<mV> iin=<mA> vbat=<mV> vout=<mV> ichg=<mA> dietemp=<0,1 °C> ichg_set=<mA> iin_set=<mA> vfloat=<mV> active=<0|1>
+```
+
+| Campo | O que é |
+|---|---|
+| `vin` | tensão de entrada do PCA9468 (VBUS do PPS), 16 mV/LSB |
+| `iin` | corrente de entrada, 4,89 mA/LSB com a compensação de ganho do chip (`adc_comp_gain`) e piso 0 |
+| `vbat` | tensão da bateria medida pelo PCA9468, 5 mV/LSB |
+| `vout` | tensão de saída do charge pump, 5 mV/LSB |
+| `ichg` | corrente de saída (IOUT), 9,78 mA/LSB |
+| `dietemp` | temperatura do die em décimos de °C: `(935 − raw) × 0,435 °C`, limitada a −250…1600 como o driver (−25…160 °C) |
+| `ichg_set` | último ICHG programado pelo driver (`pdata->ichg_cfg`) |
+| `iin_set` | último IIN programado pelo driver (`pdata->iin_cfg`); o registrador `IIN_CFG` fica um degrau (100 mA) acima por design do `pca9468_set_input_current()` |
+| `vfloat` | última V_FLOAT programada pelo driver (`pdata->v_float`) |
+| `active` | `1` = direct charging em curso e chip em ACTIVE (ADC válido) |
+
+```sh
+cat /sys/class/power_supply/battery/dc_adc
+# carregando a 25 W: vin=8960 iin=2201 vbat=4102 vout=4110 ichg=4313 dietemp=412 ichg_set=6000 iin_set=2200 vfloat=4340 active=1
+# sem PPS:           vin=0 iin=0 vbat=0 vout=0 ichg=0 dietemp=0 ichg_set=6000 iin_set=2000 vfloat=4340 active=0
+```
+(os números acima ilustram o formato, não são medição.)
+
+As conversões são as do `pca9468_read_adc()` (`drivers/battery_v2/pca9468_charger.c`),
+os mesmos pares de registradores, máscaras e passos. A diferença é a leitura:
+**uma transação i2c só** (`STS_B`…`STS_ADC_8`, 11 bytes) sob o `i2c_lock` do
+driver, então os campos são do mesmo instante. A ponte é a
+`pca9468_get_dc_adc()` (`include/sec_dc_adc.h`), chamada pelo `show` do
+`sec_battery`.
+
+Garantias:
+
+- **nunca devolve erro e nunca imprime no kmsg**: sem direct charging, com o
+  chip em standby, com falha de i2c ou sem o PCA9468 (driver ausente ou que
+  não fez probe), os campos de ADC saem 0 e `active=0`; os setpoints são o
+  estado do driver (0 se não há chip);
+- **não perturba a carga**: não escreve em registrador nenhum, não toca no
+  `adc_val[]` (o cache que a lógica de carga usa) nem no estado do driver, e
+  não toma o `pca9468->lock` (que fica preso por até centenas de ms nas
+  mensagens PPS); só o `i2c_lock`, pelo tempo de uma transação;
+- `active=1` exige as duas coisas: o estado do driver fora de `NO_CHARGING` e
+  o bit `ACTIVE_STATE` do `STS_B`. Nos estados de preparação (`CHECK_VBAT`,
+  `PRESET_DC`) o chip ainda está em standby e o nó dá `active=0`.
+
+**Não há período mínimo de leitura.** O `ADC_CTRL` fica em `AUTO_MODE` (o
+driver nunca o muda no r8q; o `FORCE_NORMAL` só vem com
+`CONFIG_DUAL_BATTERY_CELL_SENSING`, desligado, ou do `dchg_adc_mode_ctrl`), e
+nesse modo o chip converte sozinho, continuamente, enquanto está em ACTIVE:
+ninguém dispara conversão nem espera o `ADC_DONE` (a interrupção fica
+mascarada) e o próprio driver lê os `STS_ADC` a qualquer momento no loop de
+carga. Ler mais rápido que o ciclo de conversão do chip (não documentado no
+fonte) só repete o valor. O custo por leitura é uma transação i2c de 11 bytes;
+a 4 Hz isso é desprezível perto do loop do driver.
+
+### Leitura sem kmsg (v4.21)
+
+Ler estes nós não imprime mais nada no kmsg (os erros de verdade, como falha
+de i2c, continuam saindo), conferido no fonte da v4.21: `charging_type`,
+`hv_charger_status`, `vbyp_voltage`, `direct_charging_chg_status`,
+`error_cause`, `cc_info`, `batt_full_capacity`, `pd_disable`,
+`wc_tx_stop_capacity`, `fg_cycle`, `fg_asoc`, `fg_full_voltage`, `mode`,
+`online`, `batt_current_ua_now`, `batt_current_ua_avg`, `dchg_temp` e o
+`dc_adc`. A maior parte já estava muda desde a limpeza de 2026-10-24
+(`fd873d231`) e as ondas de kmsg da v4.17–v4.18. A v4.21 calou o resto:
+
+- `mode`: a `MULTI_CHARGER_MODE` não tem suporte em nenhum charger do r8q, e a
+  falha esperada imprimia 2 linhas de erro (no `sec-direct-charger` e no
+  `show`). Agora o repasse é quieto (`psy_do_property_quiet`), e o valor
+  continua `master`;
+- `vbyp_voltage` e `batt_current_ua_now` (carregando sem direct charging): o
+  `VBYP(...)` e o `isys_current=...` do fuel gauge, que saíam numa a cada ~10
+  leituras de tensão, viraram `pr_debug`. O monitor não perde nada: o
+  `[FG power]` do ciclo dele já traz ISYS e VBYP, e o health do max77705
+  imprime a VBYP que pede.
+
+A medição por nó é a do `kmsg-node-cost.sh` (`~/Android/S20FE_re/scripts/`).
 
 ## Armadilhas conhecidas
 

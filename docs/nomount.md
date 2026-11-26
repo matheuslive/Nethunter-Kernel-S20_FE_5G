@@ -11,7 +11,7 @@ um `nomount.ko` carregável por `insmod` na Image v4.11 **já gravada**, sem gra
 # logo depois de um ./build.sh da versão (o out/ ainda é dela): direto
 tools/build-nomount.sh v4.12
 # release antiga, com o out/ já de outra versão: reproduzir antes
-JOBS=6 tools/repro-release.sh v4.11 clean   # out/ = a release v4.11, byte a byte
+tools/repro-release.sh v4.11 clean          # out/ = a release v4.11, byte a byte (-j pelo MemAvailable)
 tools/build-nomount.sh v4.11                # nomount.ko + nm em build/r8q/v4.11/nomount/
 ```
 

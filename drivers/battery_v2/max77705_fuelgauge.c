@@ -733,8 +733,10 @@ static int max77705_fg_read_isys(
 		/* i_current must have a value of inow compensated */
 		i_current = i_current - inow_comp;
 	}
+	/* pr_debug: le-se a cada leitura do batt_current_ua_now; o monitor ja
+	 * imprime o ISYS no "[FG power]" do periodic_read_power */
 	if (!(fuelgauge->info.pr_cnt % PRINT_COUNT))
-		pr_info("%s: isys_current=%d%s\n", __func__, i_current,
+		pr_debug("%s: isys_current=%d%s\n", __func__, i_current,
 			(unit == SEC_BATTERY_CURRENT_UA)? "uA" : "mA");
 
 	return i_current;
@@ -833,8 +835,11 @@ static int max77705_fg_read_vbyp(struct max77705_fuelgauge_data *fuelgauge)
 	temp2 = temp / 1000000;
 	vbyp += (temp2 << 4);
 
+	/* pr_debug: le-se a cada leitura do vbyp_voltage/batt_current_ua_now; os
+	 * outros chamadores (o "[FG power]" e o health do max77705) ja imprimem
+	 * a VBYP que pediram */
 	if (!(fuelgauge->info.pr_cnt % PRINT_COUNT)) {
-		pr_info("%s: VBYP(%d), data(0x%04x)\n",
+		pr_debug("%s: VBYP(%d), data(0x%04x)\n",
 			__func__, vbyp, (data[1] << 8) | data[0]);
 	}
 

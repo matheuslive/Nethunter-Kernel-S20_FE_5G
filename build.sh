@@ -23,7 +23,7 @@
 # fatal). Sem o salvo, gerar com tools/repro-release.sh <versao>. Publica so o
 # companion; o zip do kernel atual continua na raiz e no SD (nao e podado).
 #
-# Variaveis: JOBS (-j do make); KDIR (arvore de fonte + toolchain do make,
+# Variaveis: JOBS (-j do make; padrao pelo MemAvailable); KDIR (arvore de fonte + toolchain do make,
 # padrao: a deste script) e OUT (objdir, padrao: $KDIR/out). O kbuild grava
 # caminhos absolutos nos .cmd: rodar contra o out/ de outro checkout so e
 # incremental com KDIR apontando para esse mesmo checkout (ex.: testar o
@@ -39,8 +39,11 @@ DEFCONFIG_NAME=wirus_defconfig
 CHIPSET_NAME=kona
 VARIANT=r8q
 ARCH=arm64
-VERSION=NetHunter_matheuslive_${VARIANT}_v4.20
-JOBS=${JOBS:-$(nproc)}
+VERSION=NetHunter_matheuslive_${VARIANT}_v4.21
+# -j pelo MemAvailable medido na hora (tools/jobs.sh, o mesmo do
+# tools/repro-release.sh); JOBS do ambiente vence.
+. "$DIR/tools/jobs.sh"
+jobs_by_mem
 KVER=${VERSION##*_}
 
 KDIR=$(readlink -f "${KDIR:-$DIR}")
@@ -54,8 +57,8 @@ DTS_DIR=$OUT/arch/$ARCH/boot/dts
 # Versao dos modulos Magisk (versionCode tem que ser inteiro). O sufixo .N
 # marca companion novo sobre o MESMO kernel (vmlinux inalterado): v4.11.1
 # acrescenta os .ko de USB/IP, compilados contra a Image da v4.11 ja gravada.
-MOD_VERSION=v4.20
-MOD_VERSIONCODE=4200
+MOD_VERSION=v4.21
+MOD_VERSIONCODE=4210
 
 # Toolchain versionado no proprio repo. O GCC 4.9 entra so como binutils
 # (as, ld, ar...) via CROSS_COMPILE; quem compila e o clang do REAL_CC.

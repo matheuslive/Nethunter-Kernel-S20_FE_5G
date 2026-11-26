@@ -418,6 +418,12 @@ static int sec_direct_chg_get_property(struct power_supply *psy,
 		case POWER_SUPPLY_EXT_PROP_CHANGE_CHARGING_SOURCE:
 			val->intval = charger->test_mode_source;
 			break;
+		case POWER_SUPPLY_EXT_PROP_MULTI_CHARGER_MODE:
+			/* so o sysfs "mode" pede, e o max77705 nao a trata: mesmo
+			 * repasse do default, sem a linha de erro a cada leitura */
+			ret = psy_do_property_quiet(charger->pdata->main_charger_name, get, ext_psp, value);
+			val->intval = value.intval;
+			return ret;
 		default:
 			ret = psy_do_property(charger->pdata->main_charger_name, get, ext_psp, value);
 			val->intval = value.intval;

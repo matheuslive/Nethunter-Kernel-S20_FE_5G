@@ -30,6 +30,7 @@
 #include "include/charger/pca9468_charger.h"
 #include "include/sec_charging_common.h"
 #include "include/sec_direct_charger.h"
+#include "include/sec_dc_adc.h"
 #else
 #include <linux/power/pca9468_charger.h>
 #endif
@@ -727,6 +728,98 @@ error:
 #endif
 	return conv_adc;
 }
+
+#if IS_BUILTIN(CONFIG_CHARGER_PCA9468)
+/* Leitor do /sys/class/power_supply/battery/dc_adc (sec_battery_sysfs.c).
+ * O chip so e publicado no fim do probe, depois do hw_init. Com o driver
+ * como modulo o sec_dc_adc.h da o stub que devolve tudo 0.
+ */
+static struct pca9468_charger *pca9468_dc_adc_chip;
+
+/* Um registrador STS_ADC dentro do retrato lido a partir do STS_B */
+#define DC_ADC_REG(_r, _reg)	((_r)[(_reg) - PCA9468_REG_STS_B])
+
+/* Retrato do ADC para o app ler a 4 Hz, sem perturbar a carga: uma
+ * transacao i2c so (STS_B..STS_ADC_8, 11 bytes) sob o i2c_lock, as mesmas
+ * conversoes do pca9468_read_adc() (mesmos pares de registradores, mascaras
+ * e passos), sem nada no kmsg (o regmap direto, e nao o
+ * pca9468_bulk_read_reg(), que imprime no erro) e sem escrever no adc_val[]
+ * nem em nenhum outro campo do driver. O pca9468->lock nao e tomado: ele
+ * fica preso por ate centenas de ms nas mensagens PPS, e aqui so se leem
+ * inteiros alinhados do estado.
+ *
+ * O ADC roda sozinho (ADC_CTRL em AUTO_MODE, ninguem dispara conversao; o
+ * proprio driver le os STS_ADC sem esperar nada), mas so com o chip em
+ * ACTIVE: em standby os registradores guardam a ultima conversao. Dai o
+ * active = estado do driver fora de NO_CHARGING e bit ACTIVE_STATE do STS_B.
+ */
+void pca9468_get_dc_adc(struct sec_dc_adc *out)
+{
+	struct pca9468_charger *pca9468 = READ_ONCE(pca9468_dc_adc_chip);
+	u8 r[PCA9468_REG_STS_ADC_8 - PCA9468_REG_STS_B + 1];
+	u16 raw_adc;
+	int conv, ret;
+
+	memset(out, 0, sizeof(*out));
+	if (!pca9468)
+		return;
+
+	/* setpoints: o ultimo programado pelo driver (uA/uV -> mA/mV) */
+	out->ichg_set = READ_ONCE(pca9468->pdata->ichg_cfg) / PCA9468_SEC_DENOM_U_M;
+	out->iin_set = READ_ONCE(pca9468->pdata->iin_cfg) / PCA9468_SEC_DENOM_U_M;
+	out->vfloat = READ_ONCE(pca9468->pdata->v_float) / PCA9468_SEC_DENOM_U_M;
+
+	if (READ_ONCE(pca9468->charging_state) == DC_STATE_NO_CHARGING)
+		return;
+
+	mutex_lock(&pca9468->i2c_lock);
+	ret = regmap_bulk_read(pca9468->regmap, PCA9468_REG_STS_B, r, sizeof(r));
+	mutex_unlock(&pca9468->i2c_lock);
+	if (ret < 0 || !(DC_ADC_REG(r, PCA9468_REG_STS_B) & PCA9468_BIT_ACTIVE_STATE_STS))
+		return;
+
+	/* VIN: STS_ADC_3[7:4] + STS_ADC_4[5:0] */
+	raw_adc = ((DC_ADC_REG(r, PCA9468_REG_STS_ADC_4) & PCA9468_BIT_ADC_VIN9_4)<<4) |
+		((DC_ADC_REG(r, PCA9468_REG_STS_ADC_3) & PCA9468_BIT_ADC_VIN3_0)>>4);
+	out->vin = raw_adc * VIN_STEP / PCA9468_SEC_DENOM_U_M;
+
+	/* IIN: iin = rawadc*4.89 + (rawadc*4.89 - 900)*adc_comp_gain/100, piso 0 */
+	raw_adc = ((DC_ADC_REG(r, PCA9468_REG_STS_ADC_2) & PCA9468_BIT_ADC_IIN9_8)<<8) |
+		((DC_ADC_REG(r, PCA9468_REG_STS_ADC_1) & PCA9468_BIT_ADC_IIN7_0)>>0);
+	conv = raw_adc * IIN_STEP + (raw_adc * IIN_STEP - ADC_IIN_OFFSET)*pca9468->adc_comp_gain/100;
+	if (conv < 0)
+		conv = 0;
+	out->iin = conv / PCA9468_SEC_DENOM_U_M;
+
+	/* VBAT: STS_ADC_6[7:0] + STS_ADC_7[1:0] */
+	raw_adc = ((DC_ADC_REG(r, PCA9468_REG_STS_ADC_7) & PCA9468_BIT_ADC_VBAT9_8)<<8) |
+		((DC_ADC_REG(r, PCA9468_REG_STS_ADC_6) & PCA9468_BIT_ADC_VBAT7_0)>>0);
+	out->vbat = raw_adc * VBAT_STEP / PCA9468_SEC_DENOM_U_M;
+
+	/* VOUT: STS_ADC_4[7:6] + STS_ADC_5[7:0] */
+	raw_adc = ((DC_ADC_REG(r, PCA9468_REG_STS_ADC_5) & PCA9468_BIT_ADC_VOUT9_2)<<2) |
+		((DC_ADC_REG(r, PCA9468_REG_STS_ADC_4) & PCA9468_BIT_ADC_VOUT1_0)>>6);
+	out->vout = raw_adc * VOUT_STEP / PCA9468_SEC_DENOM_U_M;
+
+	/* ICHG (IOUT): STS_ADC_2[7:2] + STS_ADC_3[3:0] */
+	raw_adc = ((DC_ADC_REG(r, PCA9468_REG_STS_ADC_3) & PCA9468_BIT_ADC_IOUT9_6)<<6) |
+		((DC_ADC_REG(r, PCA9468_REG_STS_ADC_2) & PCA9468_BIT_ADC_IOUT5_0)>>2);
+	out->ichg = raw_adc * ICHG_STEP / PCA9468_SEC_DENOM_U_M;
+
+	/* DIETEMP: (935 - raw)*0,435 C em decimos, clamp do driver em decimos */
+	raw_adc = ((DC_ADC_REG(r, PCA9468_REG_STS_ADC_8) & PCA9468_BIT_ADC_DIETEMP9_6)<<6) |
+		((DC_ADC_REG(r, PCA9468_REG_STS_ADC_7) & PCA9468_BIT_ADC_DIETEMP5_0)>>2);
+	conv = (935 - raw_adc)*DIETEMP_STEP/(DIETEMP_DENOM/10);
+	if (conv > DIETEMP_MAX*10)
+		conv = DIETEMP_MAX*10;
+	else if (conv < DIETEMP_MIN*10)
+		conv = DIETEMP_MIN*10;
+	out->dietemp = conv;
+
+	out->active = 1;
+}
+#undef DC_ADC_REG
+#endif /* IS_BUILTIN(CONFIG_CHARGER_PCA9468) */
 
 
 static int pca9468_set_vfloat(struct pca9468_charger *pca9468, unsigned int v_float)
@@ -5051,6 +5144,9 @@ static int pca9468_charger_probe(struct i2c_client *client,
 	if (ret < 0)
 		return ret;
 
+#if IS_BUILTIN(CONFIG_CHARGER_PCA9468)
+	WRITE_ONCE(pca9468_dc_adc_chip, pca9468_chg);
+#endif
 #if defined(CONFIG_BATTERY_SAMSUNG)
 	pr_info("%s: PCA9468 Charger Driver Loaded\n", __func__);
 #endif
@@ -5072,6 +5168,11 @@ static int pca9468_charger_remove(struct i2c_client *client)
 	struct pca9468_charger *pca9468_chg = i2c_get_clientdata(client);
 
 	pr_info("%s: ++\n", __func__);
+
+#if IS_BUILTIN(CONFIG_CHARGER_PCA9468)
+	if (READ_ONCE(pca9468_dc_adc_chip) == pca9468_chg)
+		WRITE_ONCE(pca9468_dc_adc_chip, NULL);
+#endif
 
 	if (client->irq) {
 		free_irq(client->irq, pca9468_chg);
