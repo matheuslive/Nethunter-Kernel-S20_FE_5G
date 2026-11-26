@@ -1,5 +1,10 @@
 # Changelog
 
+## 2026-11-26
+
+- **20:08 Alterado:** `-j` do `build.sh` e do `tools/repro-release.sh` pelo `MemAvailable` medido na hora (`tools/jobs.sh`: ~1 GB por job, 2 GB de margem, entre 2 e `nproc`; `JOBS` do ambiente vence); ccache global com 20 GB em `/mnt/cache/ccache` e `base_dir=/home/matheus/Android` (worktrees compartilham hits) ([4233167](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/42331672f))
+- **20:08 Implementado:** v4.21 (não gravada): nó `dc_adc` em `/sys/class/power_supply/battery/` com o ADC do PCA9468 numa linha (`vin iin vbat vout ichg dietemp ichg_set iin_set vfloat active`), uma transação i2c sob o `i2c_lock`, conversões do `pca9468_read_adc()`, nunca erro nem kmsg; leitura de `mode`, `vbyp_voltage` e `batt_current_ua_now` sem kmsg (os demais nós pedidos pelo Mod já eram mudos). 0 CRCs alterados contra a v4.20 ([4233167](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/42331672f), [docs/battery-sysfs.md](docs/battery-sysfs.md))
+
 ## 2026-11-16
 
 - **23:31 Alterado:** v4.20 integrada no `nethunter-13.0` (fast-forward até [dcbe5b7](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/dcbe5b78c)), gravada e bootada no S20 às 23:25 (uname v4.20, companion v4.20, nomount e 26 módulos carregados, SD montado, zram0 zstd 4 GB). O teste do writeback da zram extra no cartão fica com o app Mod. Entregáveis em `build/r8q/v4.20/` ([0e1994f](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/0e1994f31))
