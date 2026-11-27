@@ -43,7 +43,7 @@ VERSION=NetHunter_matheuslive_${VARIANT}_v4.21
 # -j pelo MemAvailable medido na hora (tools/jobs.sh, o mesmo do
 # tools/repro-release.sh); JOBS do ambiente vence.
 . "$DIR/tools/jobs.sh"
-jobs_by_mem
+jobs_by_mem || exit 1
 KVER=${VERSION##*_}
 
 KDIR=$(readlink -f "${KDIR:-$DIR}")

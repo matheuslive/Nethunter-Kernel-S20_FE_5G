@@ -36,7 +36,7 @@ KDIR=${KDIR:-$(git -C "$(dirname "$(readlink -f "$0")")" worktree list --porcela
 KDIR=$(readlink -f "$KDIR")
 # -j pelo MemAvailable (tools/jobs.sh, o mesmo do build.sh); JOBS do ambiente vence
 . "$(dirname "$(readlink -f "$0")")/jobs.sh"
-jobs_by_mem
+jobs_by_mem || exit 1
 VARIANT=r8q
 ARCH=arm64
 VERSION=NetHunter_matheuslive_${VARIANT}_${VER}
