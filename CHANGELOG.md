@@ -2,6 +2,7 @@
 
 ## 2026-11-27
 
+- **00:55 Implementado:** v4.22 (não gravada): nó `vcell_now` em `/sys/class/power_supply/battery/` (`0444`, µV + `\n`): leitura fresca do `VCELL` do MAX77705 a cada `read`, escala de 78,125 µV sem truncar a mV, uma transação i2c sem retry e sem kmsg, sem tocar no estado do fuel gauge; falha de i2c = `EIO`. `charge_type` com slow charging não imprime mais a cada leitura. 0 CRCs alterados contra a v4.21 ([146b8e0](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/146b8e014), [docs/battery-sysfs.md](docs/battery-sysfs.md))
 - **00:20 Corrigido:** ccache nas worktrees: o clang versionado ganha o mtime do checkout e o `compiler_check=mtime` padrão dava miss em toda compilação fora do checkout principal; `build.sh` e `tools/repro-release.sh` exportam `CCACHE_COMPILERCHECK=string:<sha256 do clang>` (calculado uma vez por build). Conferido: mesmo fonte pelo clang do main e da worktree = miss + hit (causa achada pela sessão etweb) ([09d9f89](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/09d9f8913))
 ## 2026-11-26
 
