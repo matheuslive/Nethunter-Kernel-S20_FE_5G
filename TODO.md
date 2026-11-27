@@ -85,6 +85,9 @@ nomount.ko se recompilam juntos.
 ### `#20` Validar a v4.19 (kmsg, quinta onda) com toque e com suspend
 *validação* — Gravada e medida em 2026-11-16 ([finding](docs/findings/2026-11-16-kmsg-v4.19.md)): cnss e qcacld validados (0/min com WoW ativo); touch `ttype`/`IB is null` só com pouco toque e o hotplug **sem nenhum suspend** na janela. Falta uma captura com o aparelho parado e de tela apagada por tempo bastante para suspender (`Disabling non-boot CPUs` presente) e outra com uso de toque (mão sobre a tela). Medir com `tools/kmsg-onda5-proj.py` (adicionado 2026-11-16)
 
+### `#23` Gravar e validar a v4.22 (`vcell_now`)
+*validação* — (2026-11-27) — integrada ([146b8e0](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/146b8e014)), zips no SD e em `ZIP/` (kernel md5 `0c404981…`, companion `f5539a24…`), **não gravada**: flash + reboot só com aprovação do usuário (a sessão Mod aceita esperar o próximo lote). Depois do boot: `vcell_now` em µV coerente com o `voltage_now` (×1000) e variando entre leituras, 0 linha de kmsg por leitura (`kmsg-node-cost.sh`) também no `charge_type` em carga lenta; avisar o Mod e mandar o resumo à mãe do S20FE_re para os docs
+
 ## Roadmap
 
 ### `#21` SUSFS no KernelSU-Next
