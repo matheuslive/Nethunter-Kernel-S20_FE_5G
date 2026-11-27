@@ -62,8 +62,9 @@ for p in "$HERE"/nomount-patches/*.patch; do
 done
 echo ">> nomount $(git -C "$SRC" describe --tags --always) ($(git -C "$SRC" rev-parse --short HEAD))"
 
-BUILD_CROSS_COMPILE=$KDIR/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
-KERNEL_LLVM_BIN=$KDIR/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
+# toolchain externo, o mesmo do build.sh (tools/toolchain.sh)
+. "$HERE/toolchain.sh"
+toolchain_check || exit 1
 make -C "$KDIR" O="$OUT" ARCH=arm64 \
 	CROSS_COMPILE="$BUILD_CROSS_COMPILE" REAL_CC="$KERNEL_LLVM_BIN" CFP_CC="$KERNEL_LLVM_BIN" \
 	CLANG_TRIPLE=aarch64-linux-gnu- DTC_EXT="$KDIR/tools/dtc" CONFIG_BUILD_ARM64_DT_OVERLAY=y \

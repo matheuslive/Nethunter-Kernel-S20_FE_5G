@@ -23,8 +23,9 @@
 # fatal). Sem o salvo, gerar com tools/repro-release.sh <versao>. Publica so o
 # companion; o zip do kernel atual continua na raiz e no SD (nao e podado).
 #
-# Variaveis: JOBS (-j do make; padrao pelo MemAvailable); KDIR (arvore de fonte + toolchain do make,
-# padrao: a deste script) e OUT (objdir, padrao: $KDIR/out). O kbuild grava
+# Variaveis: JOBS (-j do make; padrao pelo MemAvailable); TOOLCHAINS (clang e
+# binutils, padrao ~/Android/toolchains; tools/toolchain.sh); KDIR (arvore de
+# fonte do make, padrao: a deste script) e OUT (objdir, padrao: $KDIR/out). O kbuild grava
 # caminhos absolutos nos .cmd: rodar contra o out/ de outro checkout so e
 # incremental com KDIR apontando para esse mesmo checkout (ex.: testar o
 # empacotamento de uma worktree com KDIR=<checkout> OUT=<checkout>/out).
@@ -60,13 +61,14 @@ DTS_DIR=$OUT/arch/$ARCH/boot/dts
 MOD_VERSION=v4.22
 MOD_VERSIONCODE=4220
 
-# Toolchain versionado no proprio repo. O GCC 4.9 entra so como binutils
-# (as, ld, ar...) via CROSS_COMPILE; quem compila e o clang do REAL_CC.
+# Toolchain fora do repo, em $TOOLCHAINS (tools/toolchain.sh, docs/build.md).
+# O GCC 4.9 entra so como binutils (as, ld, ar...) via CROSS_COMPILE; quem
+# compila e o clang do REAL_CC.
 # O Makefile deste kernel define CC = python scripts/gcc-wrapper.py $(REAL_CC),
 # e atribuicao em Makefile vence variavel de ambiente -- por isso exportar
 # CC/LD/AR/LLVM=1 aqui nao teria efeito nenhum, tem que ser via linha de comando.
-BUILD_CROSS_COMPILE=$KDIR/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
-KERNEL_LLVM_BIN=$KDIR/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
+. "$DIR/tools/toolchain.sh"
+toolchain_check || exit 1
 CLANG_TRIPLE=aarch64-linux-gnu-
 STRIP=${BUILD_CROSS_COMPILE}strip
 
@@ -80,11 +82,8 @@ STRIP=${BUILD_CROSS_COMPILE}strip
 if command -v ccache >/dev/null 2>&1 &&
    ! grep -q '^CONFIG_DEBUG_INFO=y' "$KDIR/arch/$ARCH/configs/$DEFCONFIG_NAME"; then
 	REAL_CC="ccache $KERNEL_LLVM_BIN"
-	# O clang e versionado: cada worktree o recebe com o mtime do checkout, e o
-	# compiler_check=mtime padrao do ccache dava miss em tudo fora do checkout
-	# principal. Chave = hash do binario, calculado uma vez por build (o
-	# compiler_check=content re-hashearia os 97 MB a cada chamada).
-	export CCACHE_COMPILERCHECK="string:$(sha256sum "$(readlink -f "$KERNEL_LLVM_BIN")" | cut -c1-16)"
+	# chave por hash do clang + base_dir = checkout (ver tools/toolchain.sh)
+	toolchain_ccache_env "$KDIR"
 else
 	REAL_CC="$KERNEL_LLVM_BIN"
 fi

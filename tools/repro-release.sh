@@ -6,6 +6,7 @@
 # Uso:
 #   tools/repro-release.sh <versao> [clean]      ex.: tools/repro-release.sh v4.11 clean
 #   KDIR=<checkout> JOBS=<n> tools/repro-release.sh ...   (sem JOBS: pelo MemAvailable)
+#   TOOLCHAINS=<pasta>: toolchain externo (padrao ~/Android/toolchains; docs/build.md)
 #
 # - KDIR: checkout onde compilar (padrao: o checkout principal do repo). Tem de
 #   ser o MESMO caminho da release: com O= o kbuild grava caminhos absolutos
@@ -69,17 +70,18 @@ B_VERS=$(sed -E 's/.*\) #([0-9]+) .*/\1/' <<<"$LV")
 B_TS=$(sed -E 's/.* #[0-9]+ SMP PREEMPT //' <<<"$LV")
 echo ">> KBUILD_BUILD_USER=$B_USER HOST=$B_HOST VERSION=$B_VERS TIMESTAMP=$B_TS"
 
-BUILD_CROSS_COMPILE=$KDIR/toolchain/gcc/linux-x86/aarch64/aarch64-linux-android-4.9/bin/aarch64-linux-android-
-KERNEL_LLVM_BIN=$KDIR/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
+# Toolchain externo (tools/toolchain.sh), o mesmo do build.sh, ate para release
+# de checkout que ainda tem o toolchain/ versionado: nesse caso ele e conferido
+# byte a byte contra o externo (sha256) antes do build.
+. "$(dirname "$(readlink -f "$0")")/toolchain.sh"
+toolchain_check || exit 1
+toolchain_same_as_tree "$KDIR" || exit 1
 # Mesma regra do build.sh: ccache quebra o link com CONFIG_DEBUG_INFO=y.
 if command -v ccache >/dev/null 2>&1 &&
    ! grep -q '^CONFIG_DEBUG_INFO=y' "$KDIR/arch/$ARCH/configs/wirus_defconfig"; then
 	REAL_CC="ccache $KERNEL_LLVM_BIN"
-	# O clang e versionado: cada worktree o recebe com o mtime do checkout, e o
-	# compiler_check=mtime padrao do ccache dava miss em tudo fora do checkout
-	# principal. Chave = hash do binario, calculado uma vez por build (o
-	# compiler_check=content re-hashearia os 97 MB a cada chamada).
-	export CCACHE_COMPILERCHECK="string:$(sha256sum "$(readlink -f "$KERNEL_LLVM_BIN")" | cut -c1-16)"
+	# chave por hash do clang + base_dir = checkout (ver tools/toolchain.sh)
+	toolchain_ccache_env "$KDIR"
 else
 	REAL_CC=$KERNEL_LLVM_BIN
 fi

@@ -1,3 +1,7 @@
+# Toolchain fora do repo desde a v4.22 (~/Android/toolchains, docs/build.md):
+# o toolchain/ que sobrar de checkout antigo nao volta a ser versionado.
+/toolchain/
+
 # Gerados pelo build.sh (o kbuild roda out-of-tree, nada suja a arvore)
 /out/
 /build/
