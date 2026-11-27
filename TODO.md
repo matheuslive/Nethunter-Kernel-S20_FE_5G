@@ -44,7 +44,7 @@ para qualquer item: medir contra as baselines de `docs/baseline/` (TODO `#1`; co
 zeram no boot e o batterystats na carga), e lembrar que o `init.qcom.post_boot.sh` reimpõe os
 tunables de cpufreq no boot (memória do projeto): default de kernel só vale se o script não
 mexe no mesmo atributo, senão o caminho é o `service.sh` de um módulo. O ThinLTO já foi
-testado e descartado (`#7`). Mudança que altere layout de struct muda CRCs: companion e
+testado e descartado (`#8`). Mudança que altere layout de struct muda CRCs: companion e
 nomount.ko se recompilam juntos.
 
 ### `#9` Teto/undervolt de GPU (Zeno 910 MHz @ 390 mV, Shadow-OC/Wraith 840, QueenX 411–900, battkeeper 305–587)
