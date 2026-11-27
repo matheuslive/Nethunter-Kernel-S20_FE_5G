@@ -1,5 +1,8 @@
 # Changelog
 
+## 2026-11-27
+
+- **00:10 Corrigido:** ccache nas worktrees: o clang versionado ganha o mtime do checkout e o `compiler_check=mtime` padrão dava miss em toda compilação fora do checkout principal; `build.sh` e `tools/repro-release.sh` exportam `CCACHE_COMPILERCHECK=string:<sha256 do clang>` (calculado uma vez por build). Conferido: mesmo fonte pelo clang do main e da worktree = miss + hit (causa achada pela sessão etweb) ([09d9f89](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/09d9f8913))
 ## 2026-11-26
 
 - **21:37 Alterado:** v4.21 gravada (`tools/flash-booted.sh`, md5 relido `2a55b517…`, backup `build/r8q/boot-v4.20-2026-11-26.img`) e bootada no S20 com o companion v4.21. Carregando por direct charging: `dc_adc` com `active=1` e valores coerentes; os 19 nós do pedido do Mod (`dc_adc`, `dchg_temp`, `batt_temp`, NOISY e NOISY_STATIC) deram 0 linha de kmsg por leitura (`kmsg-node-cost.sh`). Ressalva: o canal IOUT do PCA9468 (CH4) fica desligado pelo driver no `ADC_CFG`, então o `ichg` do `dc_adc` não mede nada (fica fixo); usar `current_now` ([8f9c14d](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/8f9c14d47))
