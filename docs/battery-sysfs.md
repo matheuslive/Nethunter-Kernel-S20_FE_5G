@@ -29,6 +29,7 @@ sysfs, e é nele que este módulo trabalha.
 | `AGE_STEP` (exige **v4.5+**) | ❌ | ✅ |
 | `dc_step_chg_*`, carga rápida de 25 W, e `batt_siop_*` (v4.12+) | ❌ | ✅ |
 | `dc_adc`, retrato do ADC do direct charger (v4.21+) | ❌ | ✅ |
+| `vcell_now`, VCELL fresco do fuel gauge em µV (v4.22+) | ❌ | ✅ |
 
 ### SIOP e o `siop.sh` absorvido
 
@@ -192,6 +193,36 @@ carga. Ler mais rápido que o ciclo de conversão do chip (não documentado no
 fonte) só repete o valor. O custo por leitura é uma transação i2c de 11 bytes;
 a 4 Hz isso é desprezível perto do loop do driver.
 
+### Tensão da célula fresca: `vcell_now` (kernel v4.22+)
+
+Só leitura (`0444`, sem `store`). Uma linha: inteiro em **µV** + `\n`
+(contrato com o app Mod; não muda sem combinar com ele).
+
+```sh
+cat /sys/class/power_supply/battery/vcell_now
+4073281   (formato: µV, sem casas decimais)
+```
+
+- **Fresca a cada leitura**: lê o registrador `VCELL` (0x1A) do MAX77705 na
+  hora, uma transação i2c. O `voltage_now` (em µV também) é o valor que o
+  monitor do `sec_battery` guardou no último ciclo e só é truncado a mV;
+  o `vcell_now` é o instante da leitura.
+- **Escala do `max77705_fg_read_vcell()`** (78,125 µV/LSB), mas sem truncar a
+  mV: `µV = raw × 625 / 8` (truncado no µV; `raw × 78125` estouraria u32 acima
+  de ~3,4 V). Entre leituras o valor anda em degraus de 78 µV.
+- **Nada no kmsg**, nem em falha: a leitura não passa pelo
+  `max77705_bulk_read()` (que imprime a cada retry); é tentativa única sob o
+  mesmo `i2c_lock` do MFD. Não mexe no `voltage_now`, no contador de print do
+  fuel gauge nem no `vempty_mode` (o `max77705_fg_read_vcell()` mexe nos dois).
+- **Erro**: falha de i2c → o `read()` falha com `EIO`; sem fuel gauge MAX77705
+  (impossível no r8q) → `ENODEV`. Não há valor sentinela na linha.
+- Ponte: `max77705_fg_get_vcell_uv()` (`include/sec_vcell_now.h`, stub com
+  `-ENODEV` se o driver não é built-in), chamada pelo `show` do `sec_battery`.
+
+O custo é uma transação i2c de 2 bytes por leitura. O `VCELL` é atualizado
+pelo próprio chip no ciclo de conversão dele (não documentado no fonte); ler
+mais rápido que isso só repete o valor.
+
 ### Leitura sem kmsg (v4.21)
 
 Ler estes nós não imprime mais nada no kmsg (os erros de verdade, como falha
@@ -212,6 +243,10 @@ de i2c, continuam saindo), conferido no fonte da v4.21: `charging_type`,
   leituras de tensão, viraram `pr_debug`. O monitor não perde nada: o
   `[FG power]` do ciclo dele já traz ISYS e VBYP, e o health do max77705
   imprime a VBYP que pede.
+
+Na v4.22: `charge_type` com o `slow_charging` ligado imprimia
+`slow-charging mode` a cada leitura; virou `pr_debug` (o valor não muda). O
+`vcell_now`, novo, nasce mudo.
 
 A medição por nó é a do `kmsg-node-cost.sh` (`~/Android/S20FE_re/scripts/`).
 

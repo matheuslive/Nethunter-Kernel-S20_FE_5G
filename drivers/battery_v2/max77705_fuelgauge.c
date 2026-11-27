@@ -17,6 +17,7 @@
 #include <linux/debugfs.h>
 #include <linux/seq_file.h>
 #include "include/fuelgauge/max77705_fuelgauge.h"
+#include "include/sec_vcell_now.h"
 
 static enum power_supply_property max77705_fuelgauge_props[] = {
 	POWER_SUPPLY_PROP_ONLINE,
@@ -175,6 +176,43 @@ static void max77705_fg_periodic_read(struct max77705_fuelgauge_data *fuelgauge)
 	kfree(str);
 }
 #endif
+
+#if IS_BUILTIN(CONFIG_FUELGAUGE_MAX77705)
+/* Leitor do /sys/class/power_supply/battery/vcell_now (sec_battery_sysfs.c).
+ * O fuel gauge so e publicado no fim do probe.
+ */
+static struct max77705_fuelgauge_data *max77705_vcell_now_fg;
+
+/* Mesmo registrador e mesma escala do max77705_fg_read_vcell() (78,125 uV
+ * por LSB), mas em uV e sem truncar a mV: raw * 625 / 8 (raw * 78125 em u32
+ * estoura acima de ~3,4 V). Diferente do max77705_bulk_read(): tentativa
+ * unica e sem o pr_info de retry, sob o mesmo i2c_lock do MFD. Nao toca em
+ * voltage_now, info.pr_cnt, vempty_mode nem em nada do fuel gauge.
+ */
+int max77705_fg_get_vcell_uv(int *uv)
+{
+	struct max77705_fuelgauge_data *fuelgauge = READ_ONCE(max77705_vcell_now_fg);
+	struct max77705_dev *max77705;
+	u8 data[2];
+	u32 raw;
+	int ret;
+
+	*uv = 0;
+	if (!fuelgauge)
+		return -ENODEV;
+
+	max77705 = i2c_get_clientdata(fuelgauge->i2c);
+	mutex_lock(&max77705->i2c_lock);
+	ret = i2c_smbus_read_i2c_block_data(fuelgauge->i2c, VCELL_REG, 2, data);
+	mutex_unlock(&max77705->i2c_lock);
+	if (ret != 2)
+		return -EIO;
+
+	raw = (data[1] << 8) | data[0];
+	*uv = raw * 625 / 8;
+	return 0;
+}
+#endif /* IS_BUILTIN(CONFIG_FUELGAUGE_MAX77705) */
 
 static int max77705_fg_read_vcell(struct max77705_fuelgauge_data *fuelgauge)
 {
@@ -2981,6 +3019,9 @@ static int max77705_fuelgauge_probe(struct platform_device *pdev)
 #if defined(CONFIG_BATTERY_CISD)
 	fuelgauge->valert_count_flag = false;
 #endif
+#if IS_BUILTIN(CONFIG_FUELGAUGE_MAX77705)
+	WRITE_ONCE(max77705_vcell_now_fg, fuelgauge);
+#endif
 	pr_info("%s: max77705 Fuelgauge Driver Loaded\n", __func__);
 	return 0;
 
@@ -3006,6 +3047,11 @@ static int max77705_fuelgauge_remove(struct platform_device *pdev)
 	struct max77705_fuelgauge_data *fuelgauge = platform_get_drvdata(pdev);
 
 	pr_info("%s: ++\n", __func__);
+
+#if IS_BUILTIN(CONFIG_FUELGAUGE_MAX77705)
+	if (READ_ONCE(max77705_vcell_now_fg) == fuelgauge)
+		WRITE_ONCE(max77705_vcell_now_fg, NULL);
+#endif
 
 	if (fuelgauge->psy_fg)
 		power_supply_unregister(fuelgauge->psy_fg);

@@ -13,6 +13,7 @@
 #include "include/sec_battery_sysfs.h"
 #include "include/sec_charging_common.h"
 #include "include/sec_dc_adc.h"
+#include "include/sec_vcell_now.h"
 
 #include <linux/sec_param.h>
 #include <linux/sec_debug.h>
@@ -283,6 +284,7 @@ static struct device_attribute sec_battery_attrs[] = {
 	SEC_BATTERY_ATTR(dc_step_chg_info),
 	SEC_BATTERY_ATTR_RO(dc_adc),
 #endif
+	SEC_BATTERY_ATTR_RO(vcell_now),
 };
 
 void update_external_temp_table(struct sec_battery_info *battery, int temp[])
@@ -2060,6 +2062,21 @@ ssize_t sec_bat_show_attrs(struct device *dev,
 		}
 		break;
 #endif
+	case VCELL_NOW:
+		/* Uma linha: uV + "\n" (contrato com o app Mod,
+		 * docs/battery-sysfs.md). Leitura fresca do VCELL, sem kmsg;
+		 * falha de i2c = -EIO.
+		 */
+		{
+			int uv;
+
+			ret = max77705_fg_get_vcell_uv(&uv);
+			if (ret < 0)
+				i = ret;
+			else
+				i += scnprintf(buf + i, PAGE_SIZE - i, "%d\n", uv);
+		}
+		break;
 	default:
 		i = -EINVAL;
 		break;

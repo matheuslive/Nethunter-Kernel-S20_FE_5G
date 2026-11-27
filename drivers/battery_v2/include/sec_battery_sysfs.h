@@ -314,6 +314,8 @@ enum {
 	/* retrato do ADC do PCA9468 (v4.21), sec_dc_adc.h */
 	DC_ADC,
 #endif
+	/* VCELL fresco do MAX77705 em uV (v4.22), sec_vcell_now.h */
+	VCELL_NOW,
 };
 
 #endif /* __SEC_BATTERY_SYSFS_H */

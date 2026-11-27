@@ -1422,7 +1422,8 @@ static int max77705_chg_get_property(struct power_supply *psy,
 			val->intval = POWER_SUPPLY_CHARGE_TYPE_NONE;
 		else if (charger->slow_charging) {
 			val->intval = POWER_SUPPLY_CHARGE_TYPE_SLOW;
-			pr_info("%s: slow-charging mode\n", __func__);
+			/* pr_debug: sai a cada leitura do charge_type */
+			pr_debug("%s: slow-charging mode\n", __func__);
 		} else
 			val->intval = POWER_SUPPLY_CHARGE_TYPE_FAST;
 		break;
