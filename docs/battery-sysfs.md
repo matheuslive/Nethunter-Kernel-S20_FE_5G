@@ -145,7 +145,7 @@ vin=<mV> iin=<mA> vbat=<mV> vout=<mV> ichg=<mA> dietemp=<0,1 °C> ichg_set=<mA> 
 | `iin` | corrente de entrada, 4,89 mA/LSB com a compensação de ganho do chip (`adc_comp_gain`) e piso 0 |
 | `vbat` | tensão da bateria medida pelo PCA9468, 5 mV/LSB |
 | `vout` | tensão de saída do charge pump, 5 mV/LSB |
-| `ichg` | corrente de saída (IOUT), 9,78 mA/LSB |
+| `ichg` | **não mede nada no r8q**: o driver Samsung deixa o canal IOUT (CH4) desligado no `ADC_CFG` (só CH7/6/5/3/2/1), e o registrador devolve um valor fixo (39 mA no aparelho, v4.21). Corrente na bateria: `current_now`. Campo mantido pelo contrato |
 | `dietemp` | temperatura do die em décimos de °C: `(935 − raw) × 0,435 °C`, limitada a −250…1600 como o driver (−25…160 °C) |
 | `ichg_set` | último ICHG programado pelo driver (`pdata->ichg_cfg`) |
 | `iin_set` | último IIN programado pelo driver (`pdata->iin_cfg`); o registrador `IIN_CFG` fica um degrau (100 mA) acima por design do `pca9468_set_input_current()` |
@@ -154,10 +154,12 @@ vin=<mV> iin=<mA> vbat=<mV> vout=<mV> ichg=<mA> dietemp=<0,1 °C> ichg_set=<mA> 
 
 ```sh
 cat /sys/class/power_supply/battery/dc_adc
-# carregando a 25 W: vin=8960 iin=2201 vbat=4102 vout=4110 ichg=4313 dietemp=412 ichg_set=6000 iin_set=2200 vfloat=4340 active=1
-# sem PPS:           vin=0 iin=0 vbat=0 vout=0 ichg=0 dietemp=0 ichg_set=6000 iin_set=2000 vfloat=4340 active=0
+# medido no S20 (v4.21, 2026-11-26), carregando por DC:
+vin=7936 iin=1220 vbat=3930 vout=3940 ichg=39 dietemp=613 ichg_set=6000 iin_set=2645 vfloat=4125 active=1
+# sem PPS (formato; ADC 0, setpoints = último programado):
+vin=0 iin=0 vbat=0 vout=0 ichg=0 dietemp=0 ichg_set=6000 iin_set=2000 vfloat=4340 active=0
 ```
-(os números acima ilustram o formato, não são medição.)
+(o `vbat` é a tensão vista pelo PCA9468 e pode divergir do `voltage_now` do fuel gauge: 3930 contra 4073 mV na mesma leitura.)
 
 As conversões são as do `pca9468_read_adc()` (`drivers/battery_v2/pca9468_charger.c`),
 os mesmos pares de registradores, máscaras e passos. A diferença é a leitura:

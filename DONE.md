@@ -177,3 +177,9 @@ Gravada no S20 e validada em 2026-11-04 pela sessão do S20FE_re (boot = Image d
 
 ### `2026-11-16` Validar a v4.17 (zram lz4/zstd, zswap, kmsg terceira onda) no aparelho
 Gravada com o OK do usuário e validada pela sessão do S20FE_re: `uname` v4.17, ksud 3.4.0, `nomount.ko` da v4.15 carregado com as regras (0 CRCs mudados), 26 módulos, `comp_algorithm` = `lzo [lzo-rle] lz4 lz4hc zstd`, zswap `enabled=N` com lzo/zbud. kmsg com ~25 min de uptime: as fontes rebaixadas caíram de ~727 para ~1 linha/min; o total (1439 → 1340/min) não compara, porque o antes era carregando e o depois teve câmera ligada. Tabela e o spam que sobrou em [docs/findings/2026-11-16-kmsg-v4.17.md](docs/findings/2026-11-16-kmsg-v4.17.md)
+
+### `2026-11-26` Validar a v4.13 (KernelSU-Next) no aparelho: fases 1 e 2 (antigo #18)
+Fases 1 e 2 já estavam OK em 2026-11-03; o que faltava (uso diário e root por app) ficou provado pelo uso: KSU-Next em uso contínuo da v4.13 à v4.21, com o `.allowlist` cheio (33.720 bytes).
+
+### `2026-11-26` Validar a v4.14 (allowlist do KernelSU-Next persistindo) (antigo #20)
+No boot da v4.21: `/data/adb/ksu/.allowlist` com 33.720 bytes, gravado em 2026-11-25 e preservado nos reboots seguintes; nenhum `-126` do KSU no dmesg (a única ocorrência é dado do touch).
