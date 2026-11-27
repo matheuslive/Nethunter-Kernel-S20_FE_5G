@@ -85,13 +85,13 @@ nomount.ko se recompilam juntos.
 ### `#20` Validar a v4.19 (kmsg, quinta onda) com toque e com suspend
 *validação* — Gravada e medida em 2026-11-16 ([finding](docs/findings/2026-11-16-kmsg-v4.19.md)): cnss e qcacld validados (0/min com WoW ativo); touch `ttype`/`IB is null` só com pouco toque e o hotplug **sem nenhum suspend** na janela. Falta uma captura com o aparelho parado e de tela apagada por tempo bastante para suspender (`Disabling non-boot CPUs` presente) e outra com uso de toque (mão sobre a tela). Medir com `tools/kmsg-onda5-proj.py` (adicionado 2026-11-16)
 
-### `#23` Gravar e validar a v4.22 (`vcell_now`)
+### `#21` Gravar e validar a v4.22 (`vcell_now`)
 *validação* — (2026-11-27) — integrada ([146b8e0](https://github.com/matheuslive/Nethunter-Kernel-S20_FE_5G/commit/146b8e014)), zips no SD e em `ZIP/` (kernel md5 `0c404981…`, companion `f5539a24…`), **não gravada**: flash + reboot só com aprovação do usuário (a sessão Mod aceita esperar o próximo lote). Depois do boot: `vcell_now` em µV coerente com o `voltage_now` (×1000) e variando entre leituras, 0 linha de kmsg por leitura (`kmsg-node-cost.sh`) também no `charge_type` em carga lenta; avisar o Mod e mandar o resumo à mãe do S20FE_re para os docs
 
 ## Roadmap
 
-### `#21` SUSFS no KernelSU-Next
+### `#22` SUSFS no KernelSU-Next
 *roadmap* — (2026-11-03) — decisão do usuário: fora da v4.13. O susfs4ksu do 4.19 (`gitlab.com/simonpunk/susfs4ksu`, branch do 4.19) mexe em structs do VFS, o que muda layout e CRCs: companion e nomount.ko precisam sair juntos, e o manager tem de suportar o SUSFS. Retomar depois que a fase 2 da v4.13 estiver estável. Junto: bump para a próxima release `-legacy` do KSU-Next (o deadlock do `pkg_observer` já vai como patch local, `patches/kernelsu-next/`; os fixes de policy ficaram depois da tag `v3.4.0-legacy`; ver docs/kernelsu.md) e, no bump, conferir se o patch local caiu (já incluído no upstream: remover o arquivo) e nomount builtin (`CONFIG_NOMOUNT=y`)
 
-### `#22` zram: writeback LRU da Samsung só aguenta uma zram com backing
+### `#23` zram: writeback LRU da Samsung só aguenta uma zram com backing
 *roadmap* — (2026-11-17, achado da filha zram0-wb do Mod, conferido no fonte) O `drivers/block/zram/zram_drv.c` guarda a zram com backing num global `g_zram` (l. 348, gravado em 452). O `zram_writeback_end_io` (l. 1332) acorda o `g_zram->wbd_wait`, não a zram do bio. Com duas zram com backing, o `zram_wbd` da outra fica em D para sempre e o reset dela trava. Também o `try_wakeup_zram_wbd(g_zram)` (l. 1139) e as checagens das l. 1549/1584 supõem uma só. Contorno atual: o Mod (companion v37) recusa writeback na zram extra quando o zram0 tem backing, e vice-versa. Conserto, se valer: acordar a zram do bio (`bio->bi_private` ou `bio->bi_disk->private_data`) e trocar o `g_zram` por estado por device.
