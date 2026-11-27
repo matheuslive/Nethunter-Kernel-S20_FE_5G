@@ -75,6 +75,11 @@ KERNEL_LLVM_BIN=$KDIR/toolchain/llvm-arm-toolchain-ship/10.0/bin/clang
 if command -v ccache >/dev/null 2>&1 &&
    ! grep -q '^CONFIG_DEBUG_INFO=y' "$KDIR/arch/$ARCH/configs/wirus_defconfig"; then
 	REAL_CC="ccache $KERNEL_LLVM_BIN"
+	# O clang e versionado: cada worktree o recebe com o mtime do checkout, e o
+	# compiler_check=mtime padrao do ccache dava miss em tudo fora do checkout
+	# principal. Chave = hash do binario, calculado uma vez por build (o
+	# compiler_check=content re-hashearia os 97 MB a cada chamada).
+	export CCACHE_COMPILERCHECK="string:$(sha256sum "$(readlink -f "$KERNEL_LLVM_BIN")" | cut -c1-16)"
 else
 	REAL_CC=$KERNEL_LLVM_BIN
 fi
