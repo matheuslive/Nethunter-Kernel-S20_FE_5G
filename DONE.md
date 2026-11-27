@@ -183,3 +183,6 @@ Fases 1 e 2 já estavam OK em 2026-11-03; o que faltava (uso diário e root por 
 
 ### `2026-11-26` Validar a v4.14 (allowlist do KernelSU-Next persistindo) (antigo #20)
 No boot da v4.21: `/data/adb/ksu/.allowlist` com 33.720 bytes, gravado em 2026-11-25 e preservado nos reboots seguintes; nenhum `-126` do KSU no dmesg (a única ocorrência é dado do touch).
+
+### `2026-11-27` Gravar e validar a v4.22 (`vcell_now`)
+Gravada e bootada com o companion v4.22; `vcell_now` fresco (varia entre leituras, contra o `voltage_now` em cache) e 0 linha de kmsg por leitura em `vcell_now`/`charge_type`/`dc_adc`. O `charge_type` em carga lenta não foi exercitado (o print é pr_debug no fonte).
